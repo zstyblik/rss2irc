@@ -22,7 +22,6 @@ def get_rss(url):
         rsp = requests.get(url, timeout=30)
         rsp.raise_for_status()
         data = rsp.text
-        rsp.close()
         logging.debug('Got RSS data.')
     except Exception:
         logging.debug('Failed to get RSS data.')
