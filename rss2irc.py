@@ -3,6 +3,7 @@
 Desc: Fetch RSS and pipe it into IRC bot.
 """
 import argparse
+import feedparser
 import logging
 import logging.handlers
 import os
@@ -12,7 +13,6 @@ import signal
 import sys
 import time
 import traceback
-import xml.etree.ElementTree as ET
 
 EXPIRATION = 86400
 
@@ -22,6 +22,7 @@ def get_rss(url):
         rsp = requests.get(url, timeout=30)
         rsp.raise_for_status()
         data = rsp.text
+        rsp.close()
         logging.debug('Got RSS data.')
     except Exception:
         logging.debug('Failed to get RSS data.')
@@ -94,18 +95,15 @@ def parse_args():
 def parse_news(data):
     """Parse-out link and title out of XML."""
     news = {}
-    tree = ET.fromstring(data.encode('utf-8'))
-    for item in tree.iter('item'):
-        news_item = {}
-        for child in item.getchildren():
-            if child.tag in ['category', 'link', 'title']:
-                news_item[child.tag] = child.text
+    feed = feedparser.parse(data)
+    for entry in feed['entries']:
+        link = entry.pop('link', None)
+        title = entry.pop('title', None)
+        if not 'link' and not 'title':
+            continue
 
-        if 'link' in news_item and 'title' in news_item:
-            link = news_item.pop('link')
-            title = news_item.pop('title')
-            category = news_item.pop('category', None)
-            news[link] = (title, category)
+        category = entry.pop('category', None)
+        news[link] = (title, category)
 
     return news
 
