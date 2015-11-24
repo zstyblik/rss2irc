@@ -154,7 +154,7 @@ def write_data(data, output, handle=None, sleep=2):
 
                 msg = '[%s] %s | %s\n' % (tag, data[url][0], url)
             else:
-                msg = '%s | %s\n' % (data[url], url)
+                msg = '%s\n' % url
 
             signal.signal(signal.SIGALRM, signal_handler)
             signal.alarm(5)
