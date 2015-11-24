@@ -22,6 +22,7 @@ def get_rss(url):
         rsp = requests.get(url, timeout=30)
         rsp.raise_for_status()
         data = rsp.text
+        del rsp
         logging.debug('Got RSS data.')
     except Exception:
         logging.debug('Failed to get RSS data.')
@@ -42,12 +43,15 @@ def main():
         logging.error("Ouput '%s' doesn't exist.", args.output)
         sys.exit(1)
 
-    data = get_rss(args.rss_url)
-    if not data:
-        logging.error('Failed to get RSS from %s', args.rss_url)
-        sys.exit(1)
+    news = {}
+    for rss_url in args.rss_urls:
+        data = get_rss(rss_url)
+        if not data:
+            logging.error('Failed to get RSS from %s', args.rss_url)
+            sys.exit(1)
 
-    news = parse_news(data)
+        parse_news(data, news)
+
     if not news:
         logging.info('No news?')
         sys.exit(0)
@@ -62,7 +66,7 @@ def main():
     write_data(news, args.output, args.handle, args.sleep)
 
     expiration = int(time.time()) + EXPIRATION
-    for key in news.iterkeys():
+    for key in news.keys():
         cache[key] = expiration
 
     write_cache(cache, args.cache)
@@ -74,7 +78,7 @@ def parse_args():
                         dest='verbosity', action='store_true', default=False,
                         help='Increase logging verbosity.')
     parser.add_argument('--rss-url',
-                        dest='rss_url', type=str, required=True,
+                        dest='rss_urls', action='append', required=True,
                         help='URL of RSS Feed.')
     parser.add_argument('--handle',
                         dest='handle', type=str, default=None,
@@ -91,9 +95,11 @@ def parse_args():
                         'Excess Flood at IRC.')
     return parser.parse_args()
 
-def parse_news(data):
+def parse_news(data, news):
     """Parse-out link and title out of XML."""
-    news = {}
+    if not isinstance(news, dict):
+        raise ValueError
+
     feed = feedparser.parse(data)
     for entry in feed['entries']:
         link = entry.pop('link', None)
@@ -103,8 +109,6 @@ def parse_news(data):
 
         category = entry.pop('category', None)
         news[link] = (title, category)
-
-    return news
 
 def read_cache(cache_file):
     """Read file with Py pickle in it."""
