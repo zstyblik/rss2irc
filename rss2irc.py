@@ -39,6 +39,10 @@ def main():
     if args.verbosity:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    if args.cache_expiration < 0:
+        logging.error("Cache expiration can't be less than 0.")
+        sys.exit(1)
+
     if not os.path.exists(args.output):
         logging.error("Ouput '%s' doesn't exist.", args.output)
         sys.exit(1)
@@ -60,12 +64,12 @@ def main():
     for key in news.keys():
         if key in cache:
             logging.debug('Key %s found in cache', key)
-            cache[key] = int(time.time()) + EXPIRATION
+            cache[key] = int(time.time()) + args.cache_expiration
             news.pop(key)
 
     write_data(news, args.output, args.handle, args.sleep)
 
-    expiration = int(time.time()) + EXPIRATION
+    expiration = int(time.time()) + args.cache_expiration
     for key in news.keys():
         cache[key] = expiration
 
@@ -88,7 +92,11 @@ def parse_args():
                         help='Where to output formatted news.')
     parser.add_argument('--cache',
                         dest='cache', type=str, default=None,
-                        help='')
+                        help='Path to cache file.')
+    parser.add_argument('--cache-expiration',
+                        dest='cache_expiration', type=int, default=EXPIRATION,
+                        help=('Time, in seconds, for how long to keep items '
+                              'in cache.'))
     parser.add_argument('--sleep',
                         dest='sleep', type=int, default=2,
                         help='Sleep between messages in order to avoid '
