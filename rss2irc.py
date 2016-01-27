@@ -51,7 +51,7 @@ def main():
     for rss_url in args.rss_urls:
         data = get_rss(rss_url)
         if not data:
-            logging.error('Failed to get RSS from %s', args.rss_url)
+            logging.error('Failed to get RSS from %s', rss_url)
             sys.exit(1)
 
         parse_news(data, news)
