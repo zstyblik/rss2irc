@@ -15,12 +15,13 @@ import time
 import traceback
 
 EXPIRATION = 86400  # seconds
+HTTP_TIMEOUT = 30  # seconds
 
 
-def get_rss(url):
+def get_rss(url, timeout):
     """Fetch contents of given URL."""
     try:
-        rsp = requests.get(url, timeout=30)
+        rsp = requests.get(url, timeout=timeout)
         rsp.raise_for_status()
         data = rsp.text
         del rsp
@@ -51,7 +52,7 @@ def main():
 
     news = {}
     for rss_url in args.rss_urls:
-        data = get_rss(rss_url)
+        data = get_rss(rss_url, args.rss_http_timeout)
         if not data:
             logging.error('Failed to get RSS from %s', rss_url)
             sys.exit(1)
@@ -88,6 +89,11 @@ def parse_args():
     parser.add_argument('--rss-url',
                         dest='rss_urls', action='append', required=True,
                         help='URL of RSS Feed.')
+    parser.add_argument('--rss-http-timeout',
+                        dest='rss_http_timeout', type=int,
+                        default=HTTP_TIMEOUT,
+                        help=('HTTP Timeout. Defaults to %i seconds.'
+                              % HTTP_TIMEOUT))
     parser.add_argument('--handle',
                         dest='handle', type=str, default=None,
                         help='IRC handle of this feed.')
