@@ -14,7 +14,8 @@ import sys
 import time
 import traceback
 
-EXPIRATION = 86400
+EXPIRATION = 86400  # seconds
+
 
 def get_rss(url):
     """Fetch contents of given URL."""
@@ -30,6 +31,7 @@ def get_rss(url):
         data = None
 
     return data
+
 
 def main():
     """Main."""
@@ -76,6 +78,7 @@ def main():
 
     write_cache(cache, args.cache)
 
+
 def parse_args():
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
@@ -96,8 +99,8 @@ def parse_args():
                         help='Path to cache file.')
     parser.add_argument('--cache-expiration',
                         dest='cache_expiration', type=int, default=EXPIRATION,
-                        help=('Time, in seconds, for how long to keep items '
-                              'in cache.'))
+                        help='Time, in seconds, for how long to keep items '
+                             'in cache.')
     parser.add_argument('--cache-init',
                         dest='cache_init', action='store_true', default=False,
                         help='Prevents posting news to IRC. This is useful '
@@ -105,8 +108,9 @@ def parse_args():
     parser.add_argument('--sleep',
                         dest='sleep', type=int, default=2,
                         help='Sleep between messages in order to avoid '
-                        'Excess Flood at IRC.')
+                             'Excess Flood at IRC.')
     return parser.parse_args()
+
 
 def parse_news(data, news):
     """Parse-out link and title out of XML."""
@@ -122,6 +126,7 @@ def parse_news(data, news):
 
         category = entry.pop('category', None)
         news[link] = (title, category)
+
 
 def read_cache(cache_file):
     """Read file with Py pickle in it."""
@@ -143,9 +148,11 @@ def read_cache(cache_file):
 
     return cache
 
+
 def signal_handler(signum, frame):
     """Handle SIGALRM signal."""
     raise ValueError
+
 
 def write_cache(data, cache_file):
     """Dump data into file as a pickle."""
@@ -154,6 +161,7 @@ def write_cache(data, cache_file):
 
     with open(cache_file, 'w') as fhandle:
         pickle.dump(data, fhandle)
+
 
 def write_data(data, output, handle=None, sleep=2):
     """Write data into file."""
@@ -182,6 +190,7 @@ def write_data(data, output, handle=None, sleep=2):
                 data.pop(url)
 
             signal.alarm(0)
+
 
 if __name__ == '__main__':
     main()
