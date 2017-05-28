@@ -67,7 +67,8 @@ def main():
             cache[key] = int(time.time()) + args.cache_expiration
             news.pop(key)
 
-    write_data(news, args.output, args.handle, args.sleep)
+    if not args.cache_init:
+        write_data(news, args.output, args.handle, args.sleep)
 
     expiration = int(time.time()) + args.cache_expiration
     for key in news.keys():
@@ -97,6 +98,10 @@ def parse_args():
                         dest='cache_expiration', type=int, default=EXPIRATION,
                         help=('Time, in seconds, for how long to keep items '
                               'in cache.'))
+    parser.add_argument('--cache-init',
+                        dest='cache_init', action='store_true', default=False,
+                        help='Prevents posting news to IRC. This is useful '
+                             'when bootstrapping new RSS feed.')
     parser.add_argument('--sleep',
                         dest='sleep', type=int, default=2,
                         help='Sleep between messages in order to avoid '
