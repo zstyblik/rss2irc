@@ -1,11 +1,10 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python2
 """2015/Jul/5 @ Zdenek Styblik <stybla@turnovfree.net>
 Desc: Fetch RSS and pipe it into IRC bot.
 """
 import argparse
 import feedparser
 import logging
-import logging.handlers
 import os
 import pickle
 import requests
@@ -18,17 +17,24 @@ EXPIRATION = 86400  # seconds
 HTTP_TIMEOUT = 30  # seconds
 
 
-def get_rss(url, timeout):
-    """Fetch contents of given URL."""
+def get_rss(logger, url, timeout):
+    """Fetch contents of given URL.
+
+    :type logger: `logging.Logger`
+    :type url: str
+    :type timeout: int
+
+    :rtype: str
+    """
     try:
         rsp = requests.get(url, timeout=timeout)
         rsp.raise_for_status()
         data = rsp.text
         del rsp
-        logging.debug('Got RSS data.')
+        logger.debug('Got RSS data.')
     except Exception:
-        logging.debug('Failed to get RSS data.')
-        logging.debug(traceback.format_exc())
+        logger.debug('Failed to get RSS data.')
+        logger.debug(traceback.format_exc())
         data = None
 
     return data
@@ -37,41 +43,41 @@ def get_rss(url, timeout):
 def main():
     """Main."""
     logging.basicConfig(stream=sys.stdout)
-    logging.getLogger().setLevel(logging.ERROR)
+    logger = logging.getLogger('rss2irc')
     args = parse_args()
     if args.verbosity:
-        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
 
     if args.cache_expiration < 0:
-        logging.error("Cache expiration can't be less than 0.")
+        logger.error("Cache expiration can't be less than 0.")
         sys.exit(1)
 
     if not os.path.exists(args.output):
-        logging.error("Ouput '%s' doesn't exist.", args.output)
+        logger.error("Ouput '%s' doesn't exist.", args.output)
         sys.exit(1)
 
     news = {}
     for rss_url in args.rss_urls:
-        data = get_rss(rss_url, args.rss_http_timeout)
+        data = get_rss(logger, rss_url, args.rss_http_timeout)
         if not data:
-            logging.error('Failed to get RSS from %s', rss_url)
+            logger.error('Failed to get RSS from %s', rss_url)
             sys.exit(1)
 
         parse_news(data, news)
 
     if not news:
-        logging.info('No news?')
+        logger.info('No news?')
         sys.exit(0)
 
-    cache = read_cache(args.cache)
+    cache = read_cache(logger, args.cache)
     for key in news.keys():
         if key in cache:
-            logging.debug('Key %s found in cache', key)
+            logger.debug('Key %s found in cache', key)
             cache[key] = int(time.time()) + args.cache_expiration
             news.pop(key)
 
     if not args.cache_init:
-        write_data(news, args.output, args.handle, args.sleep)
+        write_data(logger, news, args.output, args.handle, args.sleep)
 
     expiration = int(time.time()) + args.cache_expiration
     for key in news.keys():
@@ -81,7 +87,10 @@ def main():
 
 
 def parse_args():
-    """Return parsed CLI args."""
+    """Return parsed CLI args.
+
+    :rtype: `argparse.Namespace`
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose',
                         dest='verbosity', action='store_true', default=False,
@@ -134,22 +143,28 @@ def parse_news(data, news):
         news[link] = (title, category)
 
 
-def read_cache(cache_file):
-    """Read file with Py pickle in it."""
+def read_cache(logger, cache_file):
+    """Read file with Py pickle in it.
+
+    :type logger: `logging.Logger`
+    :type cache_file: str
+
+    :rtype: dict
+    """
     if not cache_file:
         return {}
     elif not os.path.exists(cache_file):
-        logging.warn("Cache file '%s' doesn't exist.", cache_file)
+        logger.warn("Cache file '%s' doesn't exist.", cache_file)
         return {}
 
     with open(cache_file, 'r') as fhandle:
         cache = pickle.load(fhandle)
 
-    logging.debug(cache)
+    logger.debug(cache)
     time_now = time.time()
     for key in cache.keys():
         if int(cache[key]) < time_now:
-            logging.debug('URL %s has expired.', key)
+            logger.debug('URL %s has expired.', key)
             cache.pop(key)
 
     return cache
@@ -161,7 +176,11 @@ def signal_handler(signum, frame):
 
 
 def write_cache(data, cache_file):
-    """Dump data into file as a pickle."""
+    """Dump data into file as a pickle.
+
+    :type data: dict
+    :type cache_file: str
+    """
     if not cache_file:
         return
 
@@ -169,8 +188,15 @@ def write_cache(data, cache_file):
         pickle.dump(data, fhandle)
 
 
-def write_data(data, output, handle=None, sleep=2):
-    """Write data into file."""
+def write_data(logger, data, output, handle=None, sleep=2):
+    """Write data into file.
+
+    :type logger: `logging.Logger`
+    :type data: dict
+    :type output: str
+    :type handle: str
+    :type sleep: int
+    """
     with open(output, 'a') as fhandle:
         for url in data.keys():
             if handle:
@@ -186,13 +212,13 @@ def write_data(data, output, handle=None, sleep=2):
             signal.signal(signal.SIGALRM, signal_handler)
             signal.alarm(5)
             try:
-                logging.debug('Will write %s', repr(msg))
+                logger.debug('Will write %s', repr(msg))
                 fhandle.write(msg.encode('utf-8'))
                 signal.alarm(0)
                 time.sleep(sleep)
             except ValueError:
-                logging.debug(traceback.format_exc())
-                logging.debug('Failed to write %s, %s', url, data[url])
+                logger.debug(traceback.format_exc())
+                logger.debug('Failed to write %s, %s', url, data[url])
                 data.pop(url)
 
             signal.alarm(0)
