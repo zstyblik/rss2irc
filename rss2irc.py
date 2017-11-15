@@ -3,15 +3,16 @@
 Desc: Fetch RSS and pipe it into IRC bot.
 """
 import argparse
-import feedparser
 import logging
 import os
 import pickle
-import requests
 import signal
 import sys
 import time
 import traceback
+
+import feedparser
+import requests
 
 EXPIRATION = 86400  # seconds
 HTTP_TIMEOUT = 30  # seconds
