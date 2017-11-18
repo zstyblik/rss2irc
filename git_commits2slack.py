@@ -178,11 +178,6 @@ def parse_args():
         help='git web interface, resp. base URL, for given repository.'
     )
     parser.add_argument(
-        '--init',
-        dest='init', action='store_true', default=False,
-        help="Init mode. Don't post anything to slack."
-    )
-    parser.add_argument(
         '--slack-channel',
         dest='slack_channel', type=str, required=True,
         help='Name of slack channel to send formatted news to.'
