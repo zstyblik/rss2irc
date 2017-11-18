@@ -13,6 +13,19 @@ from slackclient import SlackClient
 import rss2irc
 
 
+def get_slack_token():
+    """Get slack token from ENV variable.
+
+    :rtype: str
+    :raises: `ValueError`
+    """
+    slack_token = os.environ.get('SLACK_TOKEN', None)
+    if slack_token:
+        return slack_token
+
+    raise ValueError('SLACK_TOKEN must be set.')
+
+
 def main():
     """Main."""
     logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
@@ -25,11 +38,7 @@ def main():
         logger.error("Cache expiration can't be less than 0.")
         sys.exit(1)
 
-    slack_token = os.environ.get('SLACK_TOKEN', None)
-    if not slack_token:
-        logger.error('SLACK_TOKEN must be set.')
-        sys.exit(1)
-
+    slack_token = get_slack_token()
     news = {}
     for rss_url in args.rss_urls:
         data = rss2irc.get_rss(logger, rss_url, args.rss_http_timeout)
@@ -52,8 +61,16 @@ def main():
 
     slack_client = SlackClient(slack_token)
     if not args.cache_init:
-        post_to_slack(logger, news, slack_client, args.slack_channel,
-                      args.slack_timeout, args.handle, args.sleep)
+        for url in data.keys():
+            message = rss2irc.format_message(url, data[url], args.handle)
+            try:
+                post_to_slack(
+                    logger, message, slack_client, args.slack_channel,
+                    args.slack_timeout
+                )
+                time.sleep(args.sleep)
+            except ValueError:
+                data.pop(url)
 
     expiration = int(time.time()) + args.cache_expiration
     for key in news.keys():
@@ -111,40 +128,25 @@ def parse_args():
 
 
 def post_to_slack(
-        logger, data, slack_client, slack_channel, slack_timeout, handle, sleep
+        logger, message, slack_client, slack_channel, slack_timeout
 ):
     """Post news to slack channel.
 
     :type logger: `logging.Logger`
-    :type data: dict
+    :type message: str
     :type slack_client: `slackclient.SlackClient`
     :type slack_channel: str
     :type slack_timeout: int
-    :type handle: str
-    :type sleep: int
     """
-    for url in data.keys():
-        if handle:
-            if data[url][1]:
-                tag = '%s-%s' % (handle, data[url][1])
-            else:
-                tag = '%s' % handle
-
-            msg = '[%s] %s | %s\n' % (tag, data[url][0], url)
-        else:
-            msg = '%s\n' % url
-
-        try:
-            logger.debug('Will post %s', repr(msg))
-            slack_client.api_call(
-                'chat.postMessage', channel=slack_channel,
-                text=msg.encode('utf-8'), timeout=slack_timeout
-            )
-            time.sleep(sleep)
-        except ValueError:
-            logger.debug(traceback.format_exc())
-            logger.debug('Failed to post %s, %s', url, data[url])
-            data.pop(url)
+    try:
+        logger.debug('Will post %s', repr(message))
+        slack_client.api_call(
+            'chat.postMessage', channel=slack_channel,
+            text=message.encode('utf-8'), timeout=slack_timeout
+        )
+    except ValueError:
+        logger.debug(traceback.format_exc())
+        raise
 
 
 if __name__ == '__main__':

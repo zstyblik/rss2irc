@@ -18,6 +18,26 @@ EXPIRATION = 86400  # seconds
 HTTP_TIMEOUT = 30  # seconds
 
 
+def format_message(url, msg_attrs, handle=None):
+    """Return pre-formatted message.
+
+    :type url: str
+    :type msg_attrs: tuple
+    :type handle: str
+    """
+    if handle:
+        if msg_attrs[1]:
+            tag = '%s-%s' % (handle, msg_attrs[1])
+        else:
+            tag = '%s' % handle
+
+        msg = '[%s] %s | %s\n' % (tag, msg_attrs[0], url)
+    else:
+        msg = '%s\n' % url
+
+    return msg
+
+
 def get_rss(logger, url, timeout):
     """Fetch contents of given URL.
 
@@ -200,16 +220,7 @@ def write_data(logger, data, output, handle=None, sleep=2):
     """
     with open(output, 'a') as fhandle:
         for url in data.keys():
-            if handle:
-                if data[url][1]:
-                    tag = '%s-%s' % (handle, data[url][1])
-                else:
-                    tag = '%s' % handle
-
-                msg = '[%s] %s | %s\n' % (tag, data[url][0], url)
-            else:
-                msg = '%s\n' % url
-
+            msg = format_message(url, data[url], handle)
             signal.signal(signal.SIGALRM, signal_handler)
             signal.alarm(5)
             try:
