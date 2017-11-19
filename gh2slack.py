@@ -4,10 +4,9 @@ Desc: Get GH issues/pull requests and push them to slack.
 """
 import argparse
 import logging
-import os
-import pickle
 import sys
 import time
+import traceback
 
 from slackclient import SlackClient
 import requests
@@ -33,7 +32,8 @@ def gh_request(logger, uri, timeout=rss2irc.HTTP_TIMEOUT):
     url = 'https://api.github.com/repos/{}'.format(uri)
     logger.debug('Requesting {}'.format(url))
     rsp = requests.get(
-        url, headers={'Accept': 'application/vnd.github.v3+json'},
+        url,
+        headers={'Accept': 'application/vnd.github.v3+json'},
         params={'state': 'open', 'order': 'created'},
         timeout=timeout,
     )
@@ -57,13 +57,15 @@ def main():
     uri = '/'.join([args.gh_owner, args.gh_repo, args.gh_section])
     items = gh_request(logger, uri)
 
+    logger.debug('Got %i items from GH.', len(items))
     if not items:
         logger.info('No %s for %s/%s.', args.gh_section, args.gh_owner,
                     args.gh_repo)
         sys.exit(0)
 
-    logger.debug('Got %i items from GH.', len(items))
-    cache = read_cache(logger, args.cache)
+    cache = rss2irc.read_cache(logger, args.cache)
+    scrub_cache(logger, cache)
+
     expiration = int(time.time()) + args.cache_expiration
     to_publish = set()
     for item in items:
@@ -178,27 +180,24 @@ def parse_args():
     return parser.parse_args()
 
 
-def read_cache(logger, cache_file):
-    """Read file with Py pickle in it.
+def scrub_cache(logger, cache):
+    """Scrub cache and remove expired items.
 
     :type logger: `logging.Logger`
-    :type cache_file: str
-
-    :rtype: dict
+    :type cache: dict
     """
-    if not cache_file:
-        return {}
-    elif not os.path.exists(cache_file):
-        logger.warn("Cache file '%s' doesn't exist.", cache_file)
-        return {}
-
-    with open(cache_file, 'r') as fhandle:
-        cache = pickle.load(fhandle)
-
-    logger.debug(cache)
-    time_now = time.time()
+    time_now = int(time.time())
     for key in cache.keys():
-        if int(cache[key]['expiration']) < time_now:
+        try:
+            expiration = int(cache[key]['expiration'])
+        except (KeyError, ValueError):
+            logger.error(traceback.format_exc())
+            logger.error("Invalid cache entry will be removed: '%s'",
+                         cache[key])
+            cache.pop(key)
+            continue
+
+        if expiration < time_now:
             logger.debug('URL %s has expired.', key)
             cache.pop(key)
 

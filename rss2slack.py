@@ -53,6 +53,8 @@ def main():
         sys.exit(0)
 
     cache = rss2irc.read_cache(logger, args.cache)
+    rss2irc.scrub_cache(logger, cache)
+
     for key in news.keys():
         if key in cache:
             logger.debug('Key %s found in cache', key)

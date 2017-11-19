@@ -91,6 +91,8 @@ def main():
         sys.exit(0)
 
     cache = read_cache(logger, args.cache)
+    scrub_cache(logger, cache)
+
     for key in news.keys():
         if key in cache:
             logger.debug('Key %s found in cache', key)
@@ -182,13 +184,29 @@ def read_cache(logger, cache_file):
         cache = pickle.load(fhandle)
 
     logger.debug(cache)
+    return cache
+
+
+def scrub_cache(logger, cache):
+    """Scrub cache and remove expired items.
+
+    :type logger: `logging.Logger`
+    :type cache: dict
+    """
     time_now = time.time()
     for key in cache.keys():
-        if int(cache[key]) < time_now:
+        try:
+            expiration = int(cache[key])
+        except ValueError:
+            logger.error(traceback.format_exc())
+            logger.error("Invalid cache entry will be removed: '%s'",
+                         cache[key])
+            cache.pop(key)
+            continue
+
+        if expiration < time_now:
             logger.debug('URL %s has expired.', key)
             cache.pop(key)
-
-    return cache
 
 
 def signal_handler(signum, frame):
