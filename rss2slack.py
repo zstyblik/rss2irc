@@ -61,8 +61,8 @@ def main():
 
     slack_client = SlackClient(slack_token)
     if not args.cache_init:
-        for url in data.keys():
-            message = rss2irc.format_message(url, data[url], args.handle)
+        for url in news.keys():
+            message = rss2irc.format_message(url, news[url], args.handle)
             try:
                 post_to_slack(
                     logger, message, slack_client, args.slack_channel,
@@ -70,7 +70,7 @@ def main():
                 )
                 time.sleep(args.sleep)
             except ValueError:
-                data.pop(url)
+                news.pop(url)
 
     expiration = int(time.time()) + args.cache_expiration
     for key in news.keys():
