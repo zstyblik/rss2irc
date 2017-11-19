@@ -64,8 +64,8 @@ def main():
 
     logger.debug('Got %i items from GH.', len(items))
     cache = read_cache(logger, args.cache)
-    to_publish = {}
     expiration = int(time.time()) + args.cache_expiration
+    to_publish = set()
     for item in items:
         if (
                 'html_url' not in item or
@@ -88,17 +88,18 @@ def main():
             cache[item['html_url']]['expiration'] = expiration
             continue
 
-        to_publish[item['html_url']] = {
+        cache[item['html_url']] = {
             'expiration': expiration,
             'number': item['number'],
             'repository_url': repository_url,
             'title': item['title'],
         }
+        to_publish.add(item['html_url'])
 
     if not args.cache_init and to_publish:
         slack_client = SlackClient(slack_token)
-        for html_url, attrs in to_publish.iteritems():
-            cache[html_url] = attrs
+        for html_url in to_publish:
+            attrs = cache[html_url]
             message = '[<{}|{}/{}>] <{}|{}#{}> | {}'.format(
                 attrs['repository_url'], args.gh_owner, args.gh_repo, html_url,
                 ALIASES[args.gh_section], attrs['number'], attrs['title']
