@@ -144,7 +144,7 @@ def main():
         )
         for commit in commits
     ]
-    heading = '<{}/tree/{}|{}:{}> {:d} commit{}'.format(
+    heading = '<{}/tree/{}|[{}:{}]> {:d} commit{}'.format(
         args.git_web, branch_name, repo_name, branch_name, commit_count, suffix
     )
     messages.insert(0, heading)
