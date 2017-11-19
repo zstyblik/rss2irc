@@ -30,18 +30,18 @@ def gh_request(logger, uri, timeout=rss2irc.HTTP_TIMEOUT):
     :rtype: dict
     """
     url = 'https://api.github.com/repos/{}'.format(uri)
-    logger.debug('Requesting {}'.format(url))
+    logger.debug('Requesting %s', url)
     rsp = requests.get(
         url,
         headers={'Accept': 'application/vnd.github.v3+json'},
         params={'state': 'open', 'order': 'created'},
         timeout=timeout,
     )
-    logger.debug('HTTP Status Code {:d}'.format(rsp.status_code))
+    logger.debug('HTTP Status Code %i', rsp.status_code)
     rsp.raise_for_status()
     # Note: Should we want everything, we would have to follow `Link` header
     # provided in/by GH API response.
-    logger.debug('RSP Headers: {}'.format(rsp.headers))
+    logger.debug('RSP Headers: %s', rsp.headers)
     return rsp.json()
 
 
