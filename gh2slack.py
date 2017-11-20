@@ -34,7 +34,7 @@ def gh_request(logger, uri, timeout=rss2irc.HTTP_TIMEOUT):
     rsp = requests.get(
         url,
         headers={'Accept': 'application/vnd.github.v3+json'},
-        params={'state': 'open', 'order': 'created'},
+        params={'state': 'open', 'sort': 'created'},
         timeout=timeout,
     )
     logger.debug('HTTP Status Code %i', rsp.status_code)
