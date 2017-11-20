@@ -68,6 +68,9 @@ def main():
 
     expiration = int(time.time()) + args.cache_expiration
     to_publish = set()
+    # Note: I have failed to find web link to repo in GH response.
+    repository_url = 'https://github.com/{}/{}'.format(args.gh_owner,
+                                                       args.gh_repo)
     for item in items:
         if (
                 'html_url' not in item or
@@ -76,15 +79,6 @@ def main():
         ):
             logger.debug("Item doesn't have required fields: %s", item)
             continue
-
-        # Issues and Pulls have a slightly different structure. However, after
-        # more than couple of unsuccessful tries, I've given up on link to
-        # the origin. Therefore, link is made up in case of pulls.
-        if args.gh_section == 'pulls':
-            repository_url = 'https://github.com/{}/{}'.format(args.gh_owner,
-                                                               args.gh_repo)
-        else:
-            repository_url = item.get('repository_url', DEFAULT_GH_URL)
 
         if item['html_url'] in cache:
             cache[item['html_url']]['expiration'] = expiration
