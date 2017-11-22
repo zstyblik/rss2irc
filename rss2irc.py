@@ -224,7 +224,7 @@ def write_cache(data, cache_file):
         return
 
     with open(cache_file, 'w') as fhandle:
-        pickle.dump(data, fhandle)
+        pickle.dump(data, fhandle, pickle.HIGHEST_PROTOCOL)
 
 
 def write_data(logger, data, output, handle=None, sleep=2):
