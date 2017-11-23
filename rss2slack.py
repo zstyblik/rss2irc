@@ -70,9 +70,10 @@ def main():
                     logger, message, slack_client, args.slack_channel,
                     args.slack_timeout
                 )
-                time.sleep(args.sleep)
             except ValueError:
                 news.pop(url)
+            finally:
+                time.sleep(args.sleep)
 
     expiration = int(time.time()) + args.cache_expiration
     for key in news.keys():
