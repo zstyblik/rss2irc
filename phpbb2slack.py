@@ -76,9 +76,6 @@ def main():
     if args.cache_expiration < 0:
         logger.error("Cache expiration can't be less than 0.")
         sys.exit(1)
-    elif args.mute_duration < 0:
-        logger.error("Mute duration can't be less than 0.")
-        sys.exit(1)
 
     slack_token = rss2slack.get_slack_token()
     authors = get_authors_from_file(logger, args.authors_file)
