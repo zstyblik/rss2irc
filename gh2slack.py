@@ -195,8 +195,6 @@ def scrub_cache(logger, cache):
             logger.debug('URL %s has expired.', key)
             cache.pop(key)
 
-    return cache
-
 
 if __name__ == '__main__':
     main()
