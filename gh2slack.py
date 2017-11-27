@@ -97,14 +97,14 @@ def main():
         for html_url in to_publish:
             attrs = cache[html_url]
             try:
-                title = unicode(attrs['title'], 'utf-8')
+                title = attrs['title'].encode('utf-8')
             except UnicodeEncodeError:
-                logger.error('Failed to convert title to UTF-8: %s',
+                logger.error('Failed to encode title as UTF-8: %s',
                              repr(title))
                 logger.error(traceback.format_exc())
                 title = 'Unknown title due to UTF-8 exception'
 
-            message = '[<{}|{}/{}>] <{}|{}#{}> | {}'.format(
+            message = '[<%s|%s/%s>] <%s|%s#%s> | %s' % (
                 attrs['repository_url'], args.gh_owner, args.gh_repo, html_url,
                 ALIASES[args.gh_section], attrs['number'], title
             )
