@@ -96,9 +96,17 @@ def main():
         slack_client = SlackClient(slack_token)
         for html_url in to_publish:
             attrs = cache[html_url]
+            try:
+                title = unicode(attrs['title'], 'utf-8')
+            except UnicodeEncodeError:
+                logger.error('Failed to convert title to UTF-8: %s',
+                             repr(title))
+                logger.error(traceback.format_exc())
+                title = 'Unknown title due to UTF-8 exception'
+
             message = '[<{}|{}/{}>] <{}|{}#{}> | {}'.format(
                 attrs['repository_url'], args.gh_owner, args.gh_repo, html_url,
-                ALIASES[args.gh_section], attrs['number'], attrs['title']
+                ALIASES[args.gh_section], attrs['number'], title
             )
             rss2slack.post_to_slack(
                 logger, message, slack_client, args.slack_channel,
