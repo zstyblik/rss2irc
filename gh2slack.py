@@ -4,6 +4,7 @@ Desc: Get GH issues/pull requests and push them to slack.
 """
 import argparse
 import logging
+import re
 import sys
 import time
 import traceback
@@ -18,6 +19,7 @@ ALIASES = {
     'pulls': 'pr',
 }
 DEFAULT_GH_URL = 'https://github.com'
+RE_LINK_REL_NEXT = re.compile(r'<(?P<next>.*)>; rel="next"')
 
 
 def assembly_slack_message(logger, owner, repo, section, html_url, cache_item):
@@ -61,16 +63,16 @@ def assembly_slack_message(logger, owner, repo, section, html_url, cache_item):
     return message
 
 
-def gh_request(logger, uri, timeout=rss2irc.HTTP_TIMEOUT):
-    """Make request to GH and return response.
+def gh_request(logger, url, timeout=rss2irc.HTTP_TIMEOUT):
+    """Make request GH, follow 'Link' header if present, and return list
+    responses.
 
     :type logger: `logging.Logger`
-    :type uri: str
+    :type url: str
     :type timeout: int
 
-    :rtype: dict
+    :rtype: list
     """
-    url = 'https://api.github.com/repos/{}'.format(uri)
     logger.debug('Requesting %s', url)
     rsp = requests.get(
         url,
@@ -80,10 +82,17 @@ def gh_request(logger, uri, timeout=rss2irc.HTTP_TIMEOUT):
     )
     logger.debug('HTTP Status Code %i', rsp.status_code)
     rsp.raise_for_status()
-    # Note: Should we want everything, we would have to follow `Link` header
-    # provided in/by GH API response.
     logger.debug('RSP Headers: %s', rsp.headers)
-    return rsp.json()
+    # In order to get everything, we must follow URLs in the 'Link' header as
+    # long as there is next one to follow.
+    link_header = rsp.headers.get('link', '')
+    match = RE_LINK_REL_NEXT.search(link_header)
+    if not match:
+        return [rsp.json()]
+
+    return (
+        [rsp.json()] + gh_request(logger, match.groupdict()['next'], timeout)
+    )
 
 
 def main():
@@ -95,11 +104,13 @@ def main():
         logger.setLevel(logging.DEBUG)
 
     slack_token = rss2slack.get_slack_token()
-    uri = '/'.join([args.gh_owner, args.gh_repo, args.gh_section])
-    items = gh_request(logger, uri)
+    url = 'https://api.github.com/repos/{}'.format(
+        '/'.join([args.gh_owner, args.gh_repo, args.gh_section])
+    )
+    pages = gh_request(logger, uri)
 
     logger.debug('Got %i items from GH.', len(items))
-    if not items:
+    if not pages:
         logger.info('No %s for %s/%s.', args.gh_section, args.gh_owner,
                     args.gh_repo)
         sys.exit(0)
@@ -112,32 +123,33 @@ def main():
     # Note: I have failed to find web link to repo in GH response.
     repository_url = 'https://github.com/{}/{}'.format(args.gh_owner,
                                                        args.gh_repo)
-    for item in items:
-        if (
-                'html_url' not in item or
-                'number' not in item or
-                'title' not in item
-        ):
-            logger.debug("Item doesn't have required fields: %s", item)
-            continue
+    for page_items in pages:
+        for item in page_items:
+            if (
+                    'html_url' not in item or
+                    'number' not in item or
+                    'title' not in item
+            ):
+                logger.debug("Item doesn't have required fields: %s", item)
+                continue
 
-        if item['html_url'] in cache:
-            cache[item['html_url']]['expiration'] = expiration
-            continue
+            if item['html_url'] in cache:
+                cache[item['html_url']]['expiration'] = expiration
+                continue
 
-        try:
-            item_number = int(item['number'])
-        except ValueError:
-            logger.error('Failed to convert %s to int.', item['number'])
-            item_number = 0
+            try:
+                item_number = int(item['number'])
+            except ValueError:
+                logger.error('Failed to convert %s to int.', item['number'])
+                item_number = 0
 
-        cache[item['html_url']] = {
-            'expiration': expiration,
-            'number': item_number,
-            'repository_url': repository_url,
-            'title': item['title'],
-        }
-        to_publish.add(item['html_url'])
+            cache[item['html_url']] = {
+                'expiration': expiration,
+                'number': item_number,
+                'repository_url': repository_url,
+                'title': item['title'],
+            }
+            to_publish.add(item['html_url'])
 
     if not args.cache_init and to_publish:
         slack_client = SlackClient(slack_token)

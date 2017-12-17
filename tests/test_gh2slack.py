@@ -34,12 +34,12 @@ class TestGH2slack(unittest.TestCase):
         """Test gh_request()."""
         mocked_response = MockedResponse('foo')
         mock_get.return_value = mocked_response
-        uri = 'foo/bar'
-        response = gh2slack.gh_request(self.logger, uri)
-        self.assertEqual(response, 'foo')
+        url = 'https://api.github.com/repos/foo/bar'
+        response = gh2slack.gh_request(self.logger, url)
+        self.assertEqual(response, ['foo'])
         self.assertEqual(
             mock_get.call_args[0],
-            ('https://api.github.com/repos/{}'.format(uri),)
+            (url,)
         )
         self.assertTrue(mocked_response._raise_for_status_called)
 
