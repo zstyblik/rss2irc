@@ -20,6 +20,47 @@ ALIASES = {
 DEFAULT_GH_URL = 'https://github.com'
 
 
+def assembly_slack_message(logger, owner, repo, section, html_url, cache_item):
+    """Return assebled message to be posted on slack.
+
+    :type logger: `logging.Logger`
+    :type owner: str
+    :type repo: str
+    :type section: str
+    :type html_url: str
+    :type cache_item: dict
+
+    :rtype: str
+    """
+    try:
+        title = cache_item['title'].encode('utf-8')
+    except UnicodeEncodeError:
+        logger.error('Failed to encode title as UTF-8: %s',
+                     repr(title))
+        logger.error(traceback.format_exc())
+        title = (
+            'Unknown title due to UTF-8 exception, {}#{:d}'.format(
+                section, cache_item['number']
+            )
+        )
+
+    try:
+        message = '[<{}|{}/{}>] <{}|{}#{:d}> | {}'.format(
+            cache_item['repository_url'], owner, repo, html_url,
+            ALIASES[section], cache_item['number'], title
+        )
+    except UnicodeDecodeError:
+        logger.error('Failed to assembly message: %s',
+                     traceback.format_exc())
+        message = (
+            '[{}/{}] Failed to assembly message for {}#{:d}'.format(
+                owner, repo, section, cache_item['number']
+            )
+        )
+
+    return message
+
+
 def gh_request(logger, uri, timeout=rss2irc.HTTP_TIMEOUT):
     """Make request to GH and return response.
 
@@ -84,9 +125,15 @@ def main():
             cache[item['html_url']]['expiration'] = expiration
             continue
 
+        try:
+            item_number = int(item['number'])
+        except ValueError:
+            logger.error('Failed to convert %s to int.', item['number'])
+            item_number = 0
+
         cache[item['html_url']] = {
             'expiration': expiration,
-            'number': item['number'],
+            'number': item_number,
             'repository_url': repository_url,
             'title': item['title'],
         }
@@ -95,24 +142,20 @@ def main():
     if not args.cache_init and to_publish:
         slack_client = SlackClient(slack_token)
         for html_url in to_publish:
-            attrs = cache[html_url]
+            cache_item = cache[html_url]
             try:
-                title = attrs['title'].encode('utf-8')
-            except UnicodeEncodeError:
-                logger.error('Failed to encode title as UTF-8: %s',
-                             repr(title))
+                message = assembly_slack_message(
+                    logger, args.gh_owner, args.gh_repo, args.gh_section,
+                    html_url, cache_item
+                )
+                rss2slack.post_to_slack(
+                    logger, message, slack_client, args.slack_channel,
+                    args.slack_timeout
+                )
+                time.sleep(args.sleep)
+            except Exception:
                 logger.error(traceback.format_exc())
-                title = 'Unknown title due to UTF-8 exception'
-
-            message = '[<%s|%s/%s>] <%s|%s#%s> | %s' % (
-                attrs['repository_url'], args.gh_owner, args.gh_repo, html_url,
-                ALIASES[args.gh_section], attrs['number'], title
-            )
-            rss2slack.post_to_slack(
-                logger, message, slack_client, args.slack_channel,
-                args.slack_timeout
-            )
-            time.sleep(args.sleep)
+                cache.pop(html_url)
 
     rss2irc.write_cache(cache, args.cache)
 
