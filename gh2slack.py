@@ -107,9 +107,9 @@ def main():
     url = 'https://api.github.com/repos/{}'.format(
         '/'.join([args.gh_owner, args.gh_repo, args.gh_section])
     )
-    pages = gh_request(logger, uri)
+    pages = gh_request(logger, url)
 
-    logger.debug('Got %i items from GH.', len(items))
+    logger.debug('Got %i pages from GH.', len(pages))
     if not pages:
         logger.info('No %s for %s/%s.', args.gh_section, args.gh_owner,
                     args.gh_repo)
@@ -123,7 +123,10 @@ def main():
     # Note: I have failed to find web link to repo in GH response.
     repository_url = 'https://github.com/{}/{}'.format(args.gh_owner,
                                                        args.gh_repo)
+    page_num = 0
     for page_items in pages:
+        page_num += 1
+        logger.debug('Page #%i has %i items.', page_num, len(page_items))
         for item in page_items:
             if (
                     'html_url' not in item or
