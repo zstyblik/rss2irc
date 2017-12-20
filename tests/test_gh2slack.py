@@ -3,14 +3,18 @@ import logging
 import time
 import unittest
 
-from mock import patch
+from mock import call, patch
 import gh2slack
 
 class MockedResponse(object):
 
-    def __init__(self, response):
+    def __init__(self, response, headers=None):
         self.response = response
-        self.headers = {}
+        if headers:
+            self.headers = headers
+        else:
+            self.headers = {}
+
         self.status_code = 200
         self._raise_for_status_called = False
 
@@ -29,6 +33,9 @@ class TestGH2slack(unittest.TestCase):
         self.logger = logging.getLogger()
         self.logger.disabled = True
 
+    def test_assembly_slack_message(self):
+        pass
+
     @patch('requests.get')
     def test_gh_request(self, mock_get):
         """Test gh_request()."""
@@ -42,6 +49,36 @@ class TestGH2slack(unittest.TestCase):
             (url,)
         )
         self.assertTrue(mocked_response._raise_for_status_called)
+
+    @patch('requests.get')
+    def test_gh_request_follows_link_header(self, mock_get):
+        """Test gh_request() follows up on 'Link' header."""
+        url = 'https://api.github.com/repos/foo/bar'
+        mocked_response1 = MockedResponse(
+            'foo', {'link': '<http://example.com>; rel="next"'}
+        )
+        mocked_response2 = MockedResponse('bar', {'link': 'no-next'})
+        mock_get.side_effect = [mocked_response1, mocked_response2]
+        expected_mock_calls = [
+            call(
+                'https://api.github.com/repos/foo/bar',
+                headers={'Accept': 'application/vnd.github.v3+json'},
+                params={'sort': 'created', 'state': 'open'},
+                timeout=30
+            ),
+            call(
+                'http://example.com',
+                headers={'Accept': 'application/vnd.github.v3+json'},
+                params={'sort': 'created', 'state': 'open'},
+                timeout=30
+            ),
+        ]
+
+        response = gh2slack.gh_request(self.logger, url)
+        self.assertEqual(response, ['foo', 'bar'])
+        self.assertEqual(mock_get.mock_calls, expected_mock_calls)
+        self.assertTrue(mocked_response1._raise_for_status_called)
+        self.assertTrue(mocked_response2._raise_for_status_called)
 
     def test_scrub_cache(self):
         """Test scrub_cache()."""
