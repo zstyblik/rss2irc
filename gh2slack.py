@@ -18,7 +18,8 @@ ALIASES = {
     'issues': 'issue',
     'pulls': 'pr',
 }
-DEFAULT_GH_URL = 'https://github.com'
+DEFAULT_HTTP_PROTO = 'https'
+DEFAULT_GH_URL = 'github.com'
 RE_LINK_REL_NEXT = re.compile(r'<(?P<next>.*)>; rel="next"')
 
 
@@ -63,6 +64,22 @@ def assembly_slack_message(logger, owner, repo, section, html_url, cache_item):
     return message
 
 
+def get_gh_api_url(owner, repo, section):
+    """Return assembled GitHub API URL."""
+    return '{}://api.{}/repos/{}'.format(
+        DEFAULT_HTTP_PROTO,
+        DEFAULT_GH_URL,
+        '/'.join([owner, repo, section])
+    )
+
+
+def get_gh_repository_url(owner, repo):
+    """Return assembled GitHub Repository URL."""
+    return '{}://{}/{}/{}'.format(
+        DEFAULT_HTTP_PROTO, DEFAULT_GH_URL, owner, repo
+    )
+
+
 def gh_request(logger, url, timeout=rss2irc.HTTP_TIMEOUT):
     """Make request GH, follow 'Link' header if present, and return list
     responses.
@@ -104,9 +121,7 @@ def main():
         logger.setLevel(logging.DEBUG)
 
     slack_token = rss2slack.get_slack_token()
-    url = 'https://api.github.com/repos/{}'.format(
-        '/'.join([args.gh_owner, args.gh_repo, args.gh_section])
-    )
+    url = get_gh_api_url(args.gh_owner, args.gh_repo, args.gh_section)
     pages = gh_request(logger, url)
 
     logger.debug('Got %i pages from GH.', len(pages))
@@ -118,41 +133,13 @@ def main():
     cache = rss2irc.read_cache(logger, args.cache)
     scrub_cache(logger, cache)
 
-    expiration = int(time.time()) + args.cache_expiration
-    to_publish = set()
-    # Note: I have failed to find web link to repo in GH response.
-    repository_url = 'https://github.com/{}/{}'.format(args.gh_owner,
-                                                       args.gh_repo)
-    page_num = 0
-    for page_items in pages:
-        page_num += 1
-        logger.debug('Page #%i has %i items.', page_num, len(page_items))
-        for item in page_items:
-            if (
-                    'html_url' not in item or
-                    'number' not in item or
-                    'title' not in item
-            ):
-                logger.debug("Item doesn't have required fields: %s", item)
-                continue
-
-            if item['html_url'] in cache:
-                cache[item['html_url']]['expiration'] = expiration
-                continue
-
-            try:
-                item_number = int(item['number'])
-            except ValueError:
-                logger.error('Failed to convert %s to int.', item['number'])
-                item_number = 0
-
-            cache[item['html_url']] = {
-                'expiration': expiration,
-                'number': item_number,
-                'repository_url': repository_url,
-                'title': item['title'],
-            }
-            to_publish.add(item['html_url'])
+    # Note: I have failed to find web link to repo in GH response. Therefore,
+    # let's create one.
+    repository_url = get_gh_repository_url(args.gh_owner, args.gh_repo)
+    item_expiration = int(time.time()) + args.cache_expiration
+    to_publish = process_page_items(
+        logger, cache, pages, item_expiration, repository_url
+    )
 
     if not args.cache_init and to_publish:
         slack_client = SlackClient(slack_token)
@@ -238,6 +225,54 @@ def parse_args():
         help='Increase logging verbosity.'
     )
     return parser.parse_args()
+
+
+def process_page_items(logger, cache, pages, expiration, repository_url):
+    """Process page items fetched from GH, update cache and return set of items
+    which should be published.
+
+    :type logger: `logging.Logger`
+    :type cache: dict
+    :type pages: list
+    :type expiration: int
+    :param pages: list of lists, resp. whatever GH API returns
+    :type repository_url: str
+
+    :rtype: set
+    """
+    to_publish = set()
+    page_num = 0
+    for page_items in pages:
+        page_num += 1
+        logger.debug('Page #%i has %i items.', page_num, len(page_items))
+        for item in page_items:
+            if (
+                    'html_url' not in item or
+                    'number' not in item or
+                    'title' not in item
+            ):
+                logger.debug("Item doesn't have required fields: %s", item)
+                continue
+
+            if item['html_url'] in cache:
+                cache[item['html_url']]['expiration'] = expiration
+                continue
+
+            try:
+                item_number = int(item['number'])
+            except ValueError:
+                logger.error('Failed to convert %s to int.', item['number'])
+                item_number = 0
+
+            cache[item['html_url']] = {
+                'expiration': expiration,
+                'number': item_number,
+                'repository_url': repository_url,
+                'title': item['title'],
+            }
+            to_publish.add(item['html_url'])
+
+    return to_publish
 
 
 def scrub_cache(logger, cache):

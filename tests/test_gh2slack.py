@@ -36,6 +36,16 @@ class TestGH2slack(unittest.TestCase):
     def test_assembly_slack_message(self):
         pass
 
+    def test_get_gh_api_url(self):
+        """Test get_gh_api_url()."""
+        result = gh2slack.get_gh_api_url('foo', 'bar', 'lar')
+        self.assertEqual(result, 'https://api.github.com/repos/foo/bar/lar')
+
+    def test_get_gh_repository_url(self):
+        """Test get_gh_repository_url()."""
+        result = gh2slack.get_gh_repository_url('foo', 'bar')
+        self.assertEqual(result, 'https://github.com/foo/bar')
+
     @patch('requests.get')
     def test_gh_request(self, mock_get):
         """Test gh_request()."""
@@ -79,6 +89,57 @@ class TestGH2slack(unittest.TestCase):
         self.assertEqual(mock_get.mock_calls, expected_mock_calls)
         self.assertTrue(mocked_response1._raise_for_status_called)
         self.assertTrue(mocked_response2._raise_for_status_called)
+
+    def test_process_page_items(self):
+        pages = [
+            [
+                {
+                    'html_url': 'http://example.com/foo',
+                    'number': 0,
+                    'title': 'some title#1',
+                },
+            ],
+            [
+                {
+                    'html_url': 'http://example.com/bar',
+                    'number': 1,
+                    'title': 'some title#2',
+                },
+            ],
+        ]
+        repository_url = 'http://example.com'
+        cache = {
+            'http://example.com/bar': {
+                'expiration': 0,
+                'number': 1,
+                'repository_url': repository_url,
+                'title': 'some title#2',
+            },
+        }
+        expiration = 20
+
+        expected_cache = {
+            'http://example.com/foo': {
+                'expiration': expiration,
+                'number': 0,
+                'repository_url': repository_url,
+                'title': 'some title#1',
+            },
+            'http://example.com/bar': {
+                'expiration': expiration,
+                'number': 1,
+                'repository_url': repository_url,
+                'title': 'some title#2',
+            },
+        }
+        expected_to_publish = set(['http://example.com/foo'])
+
+        to_publish = gh2slack.process_page_items(
+            self.logger, cache, pages, expiration, repository_url
+        )
+
+        self.assertEqual(cache, expected_cache)
+        self.assertEqual(to_publish, expected_to_publish)
 
     def test_scrub_cache(self):
         """Test scrub_cache()."""
