@@ -34,7 +34,21 @@ class TestGH2slack(unittest.TestCase):
         self.logger.disabled = True
 
     def test_assembly_slack_message(self):
-        pass
+        """Test assembly_slack_message()."""
+        cache_item = {
+            'number': 99,
+            'repository_url': 'http://repo-url.example.com',
+            'title': 'Some title',
+        }
+        expected_message = (
+            '[<http://repo-url.example.com|owner/repo>] '
+            '<http://example.com|section#99> | Some title'
+        )
+        message = gh2slack.assembly_slack_message(
+            self.logger, 'owner', 'repo', 'section', 'http://example.com',
+            cache_item
+        )
+        self.assertEqual(message, expected_message)
 
     def test_get_gh_api_url(self):
         """Test get_gh_api_url()."""

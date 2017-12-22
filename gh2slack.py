@@ -50,7 +50,7 @@ def assembly_slack_message(logger, owner, repo, section, html_url, cache_item):
     try:
         message = '[<{}|{}/{}>] <{}|{}#{:d}> | {}'.format(
             cache_item['repository_url'], owner, repo, html_url,
-            ALIASES[section], cache_item['number'], title
+            section, cache_item['number'], title
         )
     except UnicodeDecodeError:
         logger.error('Failed to assembly message: %s',
@@ -147,17 +147,18 @@ def main():
             cache_item = cache[html_url]
             try:
                 message = assembly_slack_message(
-                    logger, args.gh_owner, args.gh_repo, args.gh_section,
-                    html_url, cache_item
+                    logger, args.gh_owner, args.gh_repo,
+                    ALIASES[args.gh_section], html_url, cache_item
                 )
                 rss2slack.post_to_slack(
                     logger, message, slack_client, args.slack_channel,
                     args.slack_timeout
                 )
-                time.sleep(args.sleep)
             except Exception:
                 logger.error(traceback.format_exc())
                 cache.pop(html_url)
+            finally:
+                time.sleep(args.sleep)
 
     rss2irc.write_cache(cache, args.cache)
 
