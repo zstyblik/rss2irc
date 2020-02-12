@@ -1,117 +1,245 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""Unit tests for phpbb2slack.py."""
+import io
 import logging
 import os
+import sys
 import time
-import unittest
+from unittest.mock import patch
 
-import phpbb2slack
+import pytest
+
+import phpbb2slack  # noqa:I100,I202
+import rss2irc
+
+ITEM_EXPIRATION = int(time.time())
+SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
-class TestPHPBB2Slack(unittest.TestCase):
+def get_item_expiration():
+    """Return U*nix timestamp as int.
 
-    def setUp(self):
-        """Set up environment."""
-        logging.basicConfig(level=logging.CRITICAL)
-        self.logger = logging.getLogger()
-        self.logger.disabled = True
+    Hack around time-related tests and unwillingness to mock time.
+    """
+    return int(time.time())
 
-    def test_format_message(self):
-        """Test format_message()."""
-        test_data = [
-            {
-                'url': 'http://www.example.com',
-                'attrs': {
-                    'category': 'test',
-                    'comments_cnt': 12,
-                    'title': 'someTitle',
-                },
-                'handle': 'someHandle',
-                'expected': '[someHandle-test] someTitle (12) | http://www.example.com\n',
+
+@pytest.mark.parametrize(
+    'test_data',
+    [
+        {
+            'url': 'http://www.example.com',
+            'attrs': {
+                'category': 'test',
+                'comments_cnt': 12,
+                'title': 'someTitle',
             },
-            {
-                'url': 'http://www.example.com',
-                'attrs': {
-                    'category': '',
-                    'comments_cnt': 1,
-                    'title': 'someTitle',
-                },
-                'handle': 'someHandle',
-                'expected': '[someHandle] someTitle (1) | http://www.example.com\n',
-            },
-        ]
-        for data in test_data:
-            message = phpbb2slack.format_message(
-                data['url'], data['attrs'], data['handle']
-            )
-            self.assertEqual(message, data['expected'])
-
-    def test_get_authors_from_file(self):
-        """Test get_authors_from_file()."""
-        authors_file = os.path.join(
-            os.path.dirname(__file__), 'files', 'authors.txt'
-        )
-        expected_authors = [
-            'author1',
-            'author2',
-        ]
-        authors = phpbb2slack.get_authors_from_file(self.logger, authors_file)
-        self.assertEqual(authors, expected_authors)
-
-    def test_get_authors_from_file_no_file(self):
-        """Test get_authors_from_file() when no file is given."""
-        authors_file = ''
-        expected_authors = []
-        authors = phpbb2slack.get_authors_from_file(self.logger, authors_file)
-        self.assertEqual(authors, expected_authors)
-
-    def test_scrub_cache(self):
-        """Test scrub_cache()."""
-        item_expiration = int(time.time()) + 60
-        test_cache = {
-            'foo': {
-                'expiration': item_expiration,
-            },
-            'bar': {
-                'expiration': int(time.time()) - 3600,
-            },
-            'lar': {
-                'abc': 'efg',
-            },
-        }
-        expected = {
-            'foo': {
-                'expiration': item_expiration,
-            }
-        }
-        phpbb2slack.scrub_cache(self.logger, test_cache)
-        self.assertEqual(test_cache, expected)
-
-    def test_update_cache(self):
-        """Test update_cache()."""
-        item_expiration = int(time.time()) + 60
-        news = {
-            'http://example.com': {
-                'comments_cnt': 2,
-            },
-            'http://www.example.com': {
-                'comments_cnt': 20,
-            },
-        }
-        cache = {
-            'http://example.com': {
-                'expiration': 0,
+            'handle': 'someHandle',
+            'expected': (
+                '[someHandle-test] someTitle (12) | http://www.example.com\n'
+            ),
+        },
+        {
+            'url': 'http://www.example.com',
+            'attrs': {
+                'category': '',
                 'comments_cnt': 1,
+                'title': 'someTitle',
             },
-        }
-        expected_cache = {
-            'http://example.com': {
-                'expiration': item_expiration,
-                'comments_cnt': 2,
+            'handle': 'someHandle',
+            'expected': (
+                '[someHandle] someTitle (1) | http://www.example.com\n'
+            ),
+        },
+    ],
+)
+def test_format_message(test_data):
+    """Test format_message()."""
+    message = phpbb2slack.format_message(
+        test_data['url'], test_data['attrs'], test_data['handle']
+    )
+    assert message == test_data['expected']
+
+
+@pytest.mark.parametrize(
+    'input_file,expected_authors',
+    [
+        (
+            'authors.txt',
+            [
+                'author1',
+                'author2',
+            ],
+        ),
+    ],
+)
+def test_get_authors_from_file(input_file, expected_authors):
+    """Test get_authors_from_file()."""
+    authors_file = os.path.join(SCRIPT_PATH, 'files', input_file)
+    logger = logging.getLogger()
+    logger.disabled = True
+    authors = phpbb2slack.get_authors_from_file(logger, authors_file)
+    assert authors == expected_authors
+
+
+def test_get_authors_from_file_no_file():
+    """Test get_authors_from_file() when no file is given."""
+    authors_file = ''
+    expected_authors = []
+    logger = logging.getLogger()
+    logger.disabled = True
+    authors = phpbb2slack.get_authors_from_file(logger, authors_file)
+    assert authors == expected_authors
+
+
+def test_main_ideal(
+        monkeypatch, fixture_mock_requests, fixture_cache_file,
+        fixture_http_server
+):
+    """End-to-end test - ideal environment."""
+    handle = 'test'
+    http_timeout = '10'
+    rss_url = 'http://rss.example.com'
+    expected_cache_keys = [
+        'https://phpbb.example.com/threads/something-of-something.424837/',
+    ]
+
+    # Mock/set SLACK_TOKEN
+    monkeypatch.setenv('SLACK_TOKEN', 'test')
+    # Mock HTTP RSS
+    rss_fname = os.path.join(SCRIPT_PATH, 'files', 'phpbb-rss.xml')
+    with open(rss_fname, 'rb') as fhandle:
+        rss_data = fhandle.read().decode('utf-8')
+
+    mock_http_rss = fixture_mock_requests.get(rss_url, text=rss_data)
+    # Mock Slack HTTP request
+    fixture_http_server.serve_content(
+        '{"ok": "true", "error": ""}', 200,
+        {'Content-Type': 'application/json'},
+    )
+    authors_file = os.path.join(SCRIPT_PATH, 'files', 'authors.txt')
+    exception = None
+    args = [
+        './phpbb2slack.py',
+        '--authors-of-interest',
+        authors_file,
+        '--cache',
+        fixture_cache_file,
+        '--handle',
+        handle,
+        '--rss-url',
+        rss_url,
+        '--rss-http-timeout',
+        http_timeout,
+        '--slack-base-url',
+        fixture_http_server.url,
+        '--slack-channel',
+        'test',
+        '--slack-timeout',
+        '10',
+        '-v',
+    ]
+
+    print('RSS URL: {:s}'.format(rss_url))
+    print('Slack URL: {:s}'.format(fixture_http_server.url))
+    print('Handle: {:s}'.format(handle))
+    print('Cache file: {:s}'.format(fixture_cache_file))
+
+    saved_stdout = sys.stdout
+    out = io.StringIO()
+    sys.stdout = out
+
+    with patch.object(sys, 'argv', args):
+        try:
+            phpbb2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+        finally:
+            sys.stdout = saved_stdout
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == 0
+    assert out.getvalue().strip() == ''
+    # Check cache and keys in it
+    logger = logging.getLogger('test')
+    cache = rss2irc.read_cache(logger, fixture_cache_file)
+    print('Cache: {}'.format(cache))
+    assert list(cache.keys()) == expected_cache_keys
+    # Check HTTP RSS mock
+    assert mock_http_rss.called is True
+    assert mock_http_rss.call_count == 1
+    assert mock_http_rss.last_request.text is None
+    # Check HTTP Slack
+    # Note: this is just a shallow check, but it's better than nothing.
+    assert len(fixture_http_server.requests) == 1
+
+
+@pytest.mark.parametrize(
+    'cache,expected_cache',
+    [
+        (
+            {
+                'foo': {
+                    'expiration': get_item_expiration() + 60,
+                },
+                'bar': {
+                    'expiration': get_item_expiration() - 3600,
+                },
+                'lar': {
+                    'abc': 'efg',
+                },
             },
-            'http://www.example.com': {
-                'expiration': item_expiration,
-                'comments_cnt': 20,
+            {
+                'foo': {
+                    'expiration': get_item_expiration() + 60,
+                },
             },
-        }
-        phpbb2slack.update_cache(cache, news, item_expiration)
-        self.assertEqual(cache, expected_cache)
+        ),
+    ],
+)
+def test_scrub_cache(cache, expected_cache):
+    """Test scrub_cache()."""
+    logger = logging.getLogger()
+    logger.disabled = True
+    phpbb2slack.scrub_cache(logger, cache)
+    assert cache == expected_cache
+
+
+@pytest.mark.parametrize(
+    'news,cache,expected_cache,item_expiration',
+    [
+        (
+            {
+                'http://example.com': {
+                    'comments_cnt': 2,
+                },
+                'http://www.example.com': {
+                    'comments_cnt': 20,
+                },
+            },
+            {
+                'http://example.com': {
+                    'expiration': 0,
+                    'comments_cnt': 1,
+                },
+            },
+            {
+                'http://example.com': {
+                    'expiration': get_item_expiration() + 60,
+                    'comments_cnt': 2,
+                },
+                'http://www.example.com': {
+                    'expiration': get_item_expiration() + 60,
+                    'comments_cnt': 20,
+                },
+            },
+            get_item_expiration() + 60,
+        ),
+    ],
+)
+def test_update_cache(
+        news, cache, expected_cache, item_expiration
+):
+    """Test update_cache()."""
+    phpbb2slack.update_cache(cache, news, item_expiration)
+    assert cache == expected_cache

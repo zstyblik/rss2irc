@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:slash="http://purl.org/rss/1.0/modules/slash/">
+  <channel>
+    <title>phpBB-title</title>
+    <description>phpBB-description</description>
+    <pubDate>Sat, 15 Feb 2020 16:15:56 +0000</pubDate>
+    <lastBuildDate>Sat, 15 Feb 2020 16:15:56 +0000</lastBuildDate>
+    <generator>phpBB-generator</generator>
+    <link>https://phpbb.example.com/</link>
+    <atom:link rel="self" type="application/rss+xml" href="https://phpbb.example.com/forums/-/index.rss"/>
+    <item>
+      <title>Some other problem</title>
+      <pubDate>Sat, 15 Feb 2020 10:37:49 +0000</pubDate>
+      <link>https://phpbb.example.com/threads/something-of-something.424837/</link>
+      <guid>https://phpbb.example.com/threads/something-of-something.424837/</guid>
+      <author>invalid@example.com (author1)</author>
+      <dc:creator>author1</dc:creator>
+      <content:encoded><![CDATA[I have a few reports of that something of whatever and whatever.<br />
+<br />
+Does anyone else have the same situation?]]></content:encoded>
+    </item>
+    <item>
+      <title>Something not received</title>
+      <pubDate>Fri, 14 Feb 2020 20:58:36 +0000</pubDate>
+      <link>https://phpbb.example.com/threads/something-not-received.424836/</link>
+      <guid>https://phpbb.example.com/threads/something-not-received.424836/</guid>
+      <author>invalid@example.com (otherUser)</author>
+      <dc:creator>otherUser</dc:creator>
+      <content:encoded><![CDATA[I ordered a new something yesterday and still have not received an email. i have emailed twice somewhere and still nothing....so now trying something.]]></content:encoded>
+      <slash:comments>1</slash:comments>
+    </item>
+  </channel>
+</rss>

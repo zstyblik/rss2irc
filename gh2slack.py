@@ -1,6 +1,7 @@
-#!/usr/bin/env python2
-"""2017/Nov/18 @ Zdenek Styblik <stybla@turnovfree.net>
-Desc: Get GH issues/pull requests and push them to slack.
+#!/usr/bin/env python3
+"""Get GH issues/pull requests and post them to Slack.
+
+2017/Nov/18 @ Zdenek Styblik <stybla@turnovfree.net>
 """
 import argparse
 import logging
@@ -8,8 +9,8 @@ import re
 import sys
 import time
 import traceback
+from typing import Dict, List, Set
 
-from slackclient import SlackClient
 import requests
 import rss2irc
 import rss2slack
@@ -23,40 +24,34 @@ DEFAULT_GH_URL = 'github.com'
 RE_LINK_REL_NEXT = re.compile(r'<(?P<next>.*)>; rel="next"')
 
 
-def assembly_slack_message(logger, owner, repo, section, html_url, cache_item):
-    """Return assebled message to be posted on slack.
-
-    :type logger: `logging.Logger`
-    :type owner: str
-    :type repo: str
-    :type section: str
-    :type html_url: str
-    :type cache_item: dict
-
-    :rtype: str
-    """
+def assembly_slack_message(
+        logger: logging.Logger, owner: str, repo: str, section: str,
+        html_url: str, cache_item: Dict
+) -> str:
+    """Return assembled message to be posted on Slack."""
     try:
         title = cache_item['title'].encode('utf-8')
     except UnicodeEncodeError:
-        logger.error('Failed to encode title as UTF-8: %s',
-                     repr(title))
+        logger.error(
+            'Failed to encode title as UTF-8: %s', repr(title)
+        )
         logger.error(traceback.format_exc())
         title = (
-            'Unknown title due to UTF-8 exception, {}#{:d}'.format(
+            'Unknown title due to UTF-8 exception, {:s}#{:d}'.format(
                 section, cache_item['number']
             )
         )
 
     try:
-        message = '[<{}|{}/{}>] <{}|{}#{:d}> | {}'.format(
+        message = '[<{}|{}/{}>] <{}|{}#{:d}> | {:s}'.format(
             cache_item['repository_url'], owner, repo, html_url,
-            section, cache_item['number'], title
+            section, cache_item['number'], title.decode('utf-8')
         )
     except UnicodeDecodeError:
         logger.error('Failed to assembly message: %s',
                      traceback.format_exc())
         message = (
-            '[{}/{}] Failed to assembly message for {}#{:d}'.format(
+            '[{:s}/{:s}] Failed to assembly message for {:s}#{:d}'.format(
                 owner, repo, section, cache_item['number']
             )
         )
@@ -64,7 +59,7 @@ def assembly_slack_message(logger, owner, repo, section, html_url, cache_item):
     return message
 
 
-def get_gh_api_url(owner, repo, section):
+def get_gh_api_url(owner: str, repo: str, section: str) -> str:
     """Return assembled GitHub API URL."""
     return '{}://api.{}/repos/{}'.format(
         DEFAULT_HTTP_PROTO,
@@ -73,22 +68,20 @@ def get_gh_api_url(owner, repo, section):
     )
 
 
-def get_gh_repository_url(owner, repo):
+def get_gh_repository_url(owner: str, repo: str) -> str:
     """Return assembled GitHub Repository URL."""
     return '{}://{}/{}/{}'.format(
         DEFAULT_HTTP_PROTO, DEFAULT_GH_URL, owner, repo
     )
 
 
-def gh_request(logger, url, timeout=rss2irc.HTTP_TIMEOUT):
-    """Make request GH, follow 'Link' header if present, and return list
+def gh_request(
+        logger: logging.Logger, url: str, timeout: int = rss2irc.HTTP_TIMEOUT
+) -> List:
+    """Return list of responses from GitHub.
+
+    Makes request to GH, follows 'Link' header if present, and returns list
     responses.
-
-    :type logger: `logging.Logger`
-    :type url: str
-    :type timeout: int
-
-    :rtype: list
     """
     logger.debug('Requesting %s', url)
     rsp = requests.get(
@@ -113,61 +106,67 @@ def gh_request(logger, url, timeout=rss2irc.HTTP_TIMEOUT):
 
 
 def main():
-    """Main."""
+    """Fetch issues/PRs from GitHub and post them to Slack."""
     logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
     logger = logging.getLogger('gh2slack')
     args = parse_args()
     if args.verbosity:
         logger.setLevel(logging.DEBUG)
 
-    slack_token = rss2slack.get_slack_token()
-    url = get_gh_api_url(args.gh_owner, args.gh_repo, args.gh_section)
-    pages = gh_request(logger, url)
+    try:
+        slack_token = rss2slack.get_slack_token()
+        url = get_gh_api_url(args.gh_owner, args.gh_repo, args.gh_section)
+        pages = gh_request(logger, url)
 
-    logger.debug('Got %i pages from GH.', len(pages))
-    if not pages:
-        logger.info('No %s for %s/%s.', args.gh_section, args.gh_owner,
-                    args.gh_repo)
+        logger.debug('Got %i pages from GH.', len(pages))
+        if not pages:
+            logger.info('No %s for %s/%s.', args.gh_section, args.gh_owner,
+                        args.gh_repo)
+            sys.exit(0)
+
+        cache = rss2irc.read_cache(logger, args.cache)
+        scrub_cache(logger, cache)
+
+        # Note: I have failed to find web link to repo in GH response.
+        # Therefore, let's create one.
+        repository_url = get_gh_repository_url(args.gh_owner, args.gh_repo)
+        item_expiration = int(time.time()) + args.cache_expiration
+        to_publish = process_page_items(
+            logger, cache, pages, item_expiration, repository_url
+        )
+
+        if not args.cache_init and to_publish:
+            slack_client = rss2slack.get_slack_web_client(
+                slack_token, args.slack_base_url, args.slack_timeout
+            )
+            for html_url in to_publish:
+                cache_item = cache[html_url]
+                try:
+                    message = assembly_slack_message(
+                        logger, args.gh_owner, args.gh_repo,
+                        ALIASES[args.gh_section], html_url, cache_item
+                    )
+                    rss2slack.post_to_slack(
+                        logger, message, slack_client, args.slack_channel,
+                    )
+                except Exception:
+                    logger.error(traceback.format_exc())
+                    cache.pop(html_url)
+                finally:
+                    time.sleep(args.sleep)
+
+        rss2irc.write_cache(cache, args.cache)
+    except Exception:
+        logger.debug(traceback.format_exc())
+        # TODO(zstyblik):
+        # 1. touch error file
+        # 2. send error message to the channel
+    finally:
         sys.exit(0)
 
-    cache = rss2irc.read_cache(logger, args.cache)
-    scrub_cache(logger, cache)
 
-    # Note: I have failed to find web link to repo in GH response. Therefore,
-    # let's create one.
-    repository_url = get_gh_repository_url(args.gh_owner, args.gh_repo)
-    item_expiration = int(time.time()) + args.cache_expiration
-    to_publish = process_page_items(
-        logger, cache, pages, item_expiration, repository_url
-    )
-
-    if not args.cache_init and to_publish:
-        slack_client = SlackClient(slack_token)
-        for html_url in to_publish:
-            cache_item = cache[html_url]
-            try:
-                message = assembly_slack_message(
-                    logger, args.gh_owner, args.gh_repo,
-                    ALIASES[args.gh_section], html_url, cache_item
-                )
-                rss2slack.post_to_slack(
-                    logger, message, slack_client, args.slack_channel,
-                    args.slack_timeout
-                )
-            except Exception:
-                logger.error(traceback.format_exc())
-                cache.pop(html_url)
-            finally:
-                time.sleep(args.sleep)
-
-    rss2irc.write_cache(cache, args.cache)
-
-
-def parse_args():
-    """Return parsed CLI args.
-
-    :rtype: `argparse.Namespace`
-    """
+def parse_args() -> argparse.Namespace:
+    """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--cache',
@@ -203,16 +202,23 @@ def parse_args():
         help='GH "section" to track.'
     )
     parser.add_argument(
+        '--slack-base-url',
+        dest='slack_base_url', type=str,
+        default=rss2slack.SLACK_BASE_URL,
+        help='Base URL for Slack client.'
+    )
+    parser.add_argument(
         '--slack-channel',
         dest='slack_channel', type=str, required=True,
-        help='Name of slack channel to send formatted news to.'
+        help='Name of Slack channel to send formatted news to.'
     )
     parser.add_argument(
         '--slack-timeout',
         dest='slack_timeout', type=int,
         default=rss2irc.HTTP_TIMEOUT,
-        help=('slack API Timeout. Defaults to %i seconds.'
-              % rss2irc.HTTP_TIMEOUT)
+        help='Slack API Timeout. Defaults to {:d} seconds.'.format(
+            rss2irc.HTTP_TIMEOUT
+        )
     )
     parser.add_argument(
         '--sleep',
@@ -228,18 +234,13 @@ def parse_args():
     return parser.parse_args()
 
 
-def process_page_items(logger, cache, pages, expiration, repository_url):
-    """Process page items fetched from GH, update cache and return set of items
-    which should be published.
+def process_page_items(
+        logger: logging.Logger, cache: Dict, pages: List,
+        expiration: int, repository_url: str
+) -> Set:
+    """Parse page items, update cache and return items to publish.
 
-    :type logger: `logging.Logger`
-    :type cache: dict
-    :type pages: list
-    :type expiration: int
     :param pages: list of lists, resp. whatever GH API returns
-    :type repository_url: str
-
-    :rtype: set
     """
     to_publish = set()
     page_num = 0
@@ -248,9 +249,9 @@ def process_page_items(logger, cache, pages, expiration, repository_url):
         logger.debug('Page #%i has %i items.', page_num, len(page_items))
         for item in page_items:
             if (
-                    'html_url' not in item or
-                    'number' not in item or
-                    'title' not in item
+                    'html_url' not in item
+                    or 'number' not in item
+                    or 'title' not in item
             ):
                 logger.debug("Item doesn't have required fields: %s", item)
                 continue
@@ -276,14 +277,10 @@ def process_page_items(logger, cache, pages, expiration, repository_url):
     return to_publish
 
 
-def scrub_cache(logger, cache):
-    """Scrub cache and remove expired items.
-
-    :type logger: `logging.Logger`
-    :type cache: dict
-    """
+def scrub_cache(logger: logging.Logger, cache: Dict) -> None:
+    """Scrub cache and remove expired items."""
     time_now = int(time.time())
-    for key in cache.keys():
+    for key in list(cache.keys()):
         try:
             expiration = int(cache[key]['expiration'])
         except (KeyError, ValueError):

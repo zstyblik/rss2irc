@@ -1,14 +1,23 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
+"""Unit tests for gh2slack.py."""
+import io
+import json
 import logging
+import os
+import sys
 import time
-import unittest
+from unittest.mock import call, patch
 
-from mock import call, patch
 import gh2slack
+import rss2irc
 
-class MockedResponse(object):
+SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
-    def __init__(self, response, headers=None):
+
+class MockedResponse:
+    """Mocked `requests.Response`."""
+
+    def __init__(self, response, headers=None):  # noqa: D107
         self.response = response
         if headers:
             self.headers = headers
@@ -19,160 +28,257 @@ class MockedResponse(object):
         self._raise_for_status_called = False
 
     def raise_for_status(self):
+        """Note raise_for_status has been called."""
         self._raise_for_status_called = True
 
     def json(self):
+        """Return response as a JSON."""
         return self.response
 
 
-class TestGH2slack(unittest.TestCase):
+def test_assembly_slack_message():
+    """Test assembly_slack_message()."""
+    cache_item = {
+        'number': 99,
+        'repository_url': 'http://repo-url.example.com',
+        'title': 'Some title',
+    }
+    expected_message = (
+        '[<http://repo-url.example.com|owner/repo>] '
+        '<http://example.com|section#99> | Some title'
+    )
 
-    def setUp(self):
-        """Set up environment."""
-        logging.basicConfig(level=logging.CRITICAL)
-        self.logger = logging.getLogger()
-        self.logger.disabled = True
+    logger = logging.getLogger('test')
+    message = gh2slack.assembly_slack_message(
+        logger, 'owner', 'repo', 'section', 'http://example.com',
+        cache_item
+    )
 
-    def test_assembly_slack_message(self):
-        """Test assembly_slack_message()."""
-        cache_item = {
-            'number': 99,
-            'repository_url': 'http://repo-url.example.com',
-            'title': 'Some title',
-        }
-        expected_message = (
-            '[<http://repo-url.example.com|owner/repo>] '
-            '<http://example.com|section#99> | Some title'
-        )
-        message = gh2slack.assembly_slack_message(
-            self.logger, 'owner', 'repo', 'section', 'http://example.com',
-            cache_item
-        )
-        self.assertEqual(message, expected_message)
+    assert message == expected_message
 
-    def test_get_gh_api_url(self):
-        """Test get_gh_api_url()."""
-        result = gh2slack.get_gh_api_url('foo', 'bar', 'lar')
-        self.assertEqual(result, 'https://api.github.com/repos/foo/bar/lar')
 
-    def test_get_gh_repository_url(self):
-        """Test get_gh_repository_url()."""
-        result = gh2slack.get_gh_repository_url('foo', 'bar')
-        self.assertEqual(result, 'https://github.com/foo/bar')
+def test_get_gh_api_url():
+    """Test get_gh_api_url()."""
+    result = gh2slack.get_gh_api_url('foo', 'bar', 'lar')
+    assert result == 'https://api.github.com/repos/foo/bar/lar'
 
-    @patch('requests.get')
-    def test_gh_request(self, mock_get):
-        """Test gh_request()."""
-        mocked_response = MockedResponse('foo')
-        mock_get.return_value = mocked_response
-        url = 'https://api.github.com/repos/foo/bar'
-        response = gh2slack.gh_request(self.logger, url)
-        self.assertEqual(response, ['foo'])
-        self.assertEqual(
-            mock_get.call_args[0],
-            (url,)
-        )
-        self.assertTrue(mocked_response._raise_for_status_called)
 
-    @patch('requests.get')
-    def test_gh_request_follows_link_header(self, mock_get):
-        """Test gh_request() follows up on 'Link' header."""
-        url = 'https://api.github.com/repos/foo/bar'
-        mocked_response1 = MockedResponse(
-            'foo', {'link': '<http://example.com>; rel="next"'}
-        )
-        mocked_response2 = MockedResponse('bar', {'link': 'no-next'})
-        mock_get.side_effect = [mocked_response1, mocked_response2]
-        expected_mock_calls = [
-            call(
-                'https://api.github.com/repos/foo/bar',
-                headers={'Accept': 'application/vnd.github.v3+json'},
-                params={'sort': 'created', 'state': 'open'},
-                timeout=30
-            ),
-            call(
-                'http://example.com',
-                headers={'Accept': 'application/vnd.github.v3+json'},
-                params={'sort': 'created', 'state': 'open'},
-                timeout=30
-            ),
-        ]
+def test_get_gh_repository_url():
+    """Test get_gh_repository_url()."""
+    result = gh2slack.get_gh_repository_url('foo', 'bar')
+    assert result == 'https://github.com/foo/bar'
 
-        response = gh2slack.gh_request(self.logger, url)
-        self.assertEqual(response, ['foo', 'bar'])
-        self.assertEqual(mock_get.mock_calls, expected_mock_calls)
-        self.assertTrue(mocked_response1._raise_for_status_called)
-        self.assertTrue(mocked_response2._raise_for_status_called)
 
-    def test_process_page_items(self):
-        pages = [
-            [
-                {
-                    'html_url': 'http://example.com/foo',
-                    'number': 0,
-                    'title': 'some title#1',
-                },
-            ],
-            [
-                {
-                    'html_url': 'http://example.com/bar',
-                    'number': 1,
-                    'title': 'some title#2',
-                },
-            ],
-        ]
-        repository_url = 'http://example.com'
-        cache = {
-            'http://example.com/bar': {
-                'expiration': 0,
-                'number': 1,
-                'repository_url': repository_url,
-                'title': 'some title#2',
-            },
-        }
-        expiration = 20
+@patch('requests.get')
+def test_gh_request(mock_get):
+    """Test gh_request()."""
+    mocked_response = MockedResponse('foo')
+    mock_get.return_value = mocked_response
+    url = 'https://api.github.com/repos/foo/bar'
 
-        expected_cache = {
-            'http://example.com/foo': {
-                'expiration': expiration,
+    logger = logging.getLogger('test')
+    response = gh2slack.gh_request(logger, url)
+
+    assert response == ['foo']
+    assert mock_get.call_args[0] == (url,)
+    assert mocked_response._raise_for_status_called is True
+
+
+@patch('requests.get')
+def test_gh_request_follows_link_header(mock_get):
+    """Test gh_request() follows up on 'Link' header."""
+    url = 'https://api.github.com/repos/foo/bar'
+    mocked_response1 = MockedResponse(
+        'foo', {'link': '<http://example.com>; rel="next"'}
+    )
+    mocked_response2 = MockedResponse('bar', {'link': 'no-next'})
+    mock_get.side_effect = [mocked_response1, mocked_response2]
+    expected_mock_calls = [
+        call(
+            'https://api.github.com/repos/foo/bar',
+            headers={'Accept': 'application/vnd.github.v3+json'},
+            params={'sort': 'created', 'state': 'open'},
+            timeout=30
+        ),
+        call(
+            'http://example.com',
+            headers={'Accept': 'application/vnd.github.v3+json'},
+            params={'sort': 'created', 'state': 'open'},
+            timeout=30
+        ),
+    ]
+
+    logger = logging.getLogger('test')
+    response = gh2slack.gh_request(logger, url)
+
+    assert response == ['foo', 'bar']
+    assert mock_get.mock_calls == expected_mock_calls
+    assert mocked_response1._raise_for_status_called is True
+    assert mocked_response2._raise_for_status_called is True
+
+
+def test_main_ideal(
+        monkeypatch, fixture_mock_requests, fixture_cache_file,
+        fixture_http_server
+):
+    """End-to-end test - ideal environment."""
+    gh_repo = 'test-repo'
+    gh_owner = 'test-user'
+    gh_section = 'pulls'
+    gh_url = gh2slack.get_gh_api_url(gh_owner, gh_repo, gh_section)
+    expected_cache_keys = [
+        'http://example.com/foo',
+        'http://example.com/bar',
+    ]
+
+    # Mock/set SLACK_TOKEN
+    monkeypatch.setenv('SLACK_TOKEN', 'test')
+    # Mock HTTP RSS
+    pages = [
+        {
+            'html_url': 'http://example.com/foo',
+            'number': 0,
+            'title': 'some title#1',
+        },
+        {
+            'html_url': 'http://example.com/bar',
+            'number': 1,
+            'title': 'some title#2',
+        },
+    ]
+    mock_http_rss = fixture_mock_requests.get(gh_url, text=json.dumps(pages))
+    # Mock Slack HTTP request
+    fixture_http_server.serve_content(
+        '{"ok": "true", "error": ""}', 200,
+        {'Content-Type': 'application/json'},
+    )
+    exception = None
+    args = [
+        './gh2slack.py',
+        '--cache',
+        fixture_cache_file,
+        '--gh-owner',
+        gh_owner,
+        '--gh-repo',
+        gh_repo,
+        '--gh-section',
+        gh_section,
+        '--slack-base-url',
+        fixture_http_server.url,
+        '--slack-channel',
+        'test',
+        '--slack-timeout',
+        '10',
+        '-v',
+    ]
+
+    print('Slack URL: {:s}'.format(fixture_http_server.url))
+    print('Cache file: {:s}'.format(fixture_cache_file))
+
+    saved_stdout = sys.stdout
+    out = io.StringIO()
+    sys.stdout = out
+
+    with patch.object(sys, 'argv', args):
+        try:
+            gh2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+        finally:
+            sys.stdout = saved_stdout
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == 0
+    assert out.getvalue().strip() == ''
+    # Check cache and keys in it
+    logger = logging.getLogger('test')
+    cache = rss2irc.read_cache(logger, fixture_cache_file)
+    print('Cache: {}'.format(cache))
+    assert list(cache.keys()) == expected_cache_keys
+    # Check HTTP RSS mock
+    assert mock_http_rss.called is True
+    assert mock_http_rss.call_count == 1
+    assert mock_http_rss.last_request.text is None
+    # Check HTTP Slack
+    # Note: this is just a shallow check, but it's better than nothing.
+    assert len(fixture_http_server.requests) == 2
+
+
+def test_process_page_items():
+    """Test process_page_items()."""
+    pages = [
+        [
+            {
+                'html_url': 'http://example.com/foo',
                 'number': 0,
-                'repository_url': repository_url,
                 'title': 'some title#1',
             },
-            'http://example.com/bar': {
-                'expiration': expiration,
+        ],
+        [
+            {
+                'html_url': 'http://example.com/bar',
                 'number': 1,
-                'repository_url': repository_url,
                 'title': 'some title#2',
             },
-        }
-        expected_to_publish = set(['http://example.com/foo'])
+        ],
+    ]
+    repository_url = 'http://example.com'
+    cache = {
+        'http://example.com/bar': {
+            'expiration': 0,
+            'number': 1,
+            'repository_url': repository_url,
+            'title': 'some title#2',
+        },
+    }
+    expiration = 20
 
-        to_publish = gh2slack.process_page_items(
-            self.logger, cache, pages, expiration, repository_url
-        )
+    expected_cache = {
+        'http://example.com/foo': {
+            'expiration': expiration,
+            'number': 0,
+            'repository_url': repository_url,
+            'title': 'some title#1',
+        },
+        'http://example.com/bar': {
+            'expiration': expiration,
+            'number': 1,
+            'repository_url': repository_url,
+            'title': 'some title#2',
+        },
+    }
+    expected_to_publish = set(['http://example.com/foo'])
 
-        self.assertEqual(cache, expected_cache)
-        self.assertEqual(to_publish, expected_to_publish)
+    logger = logging.getLogger('test')
+    to_publish = gh2slack.process_page_items(
+        logger, cache, pages, expiration, repository_url
+    )
 
-    def test_scrub_cache(self):
-        """Test scrub_cache()."""
-        item_expiration = int(time.time()) + 60
-        test_cache = {
-            'foo': {
-                'expiration': item_expiration,
-            },
-            'bar': {
-                'expiration': int(time.time()) - 3600,
-            },
-            'lar': {
-                'abc': 'efg',
-            },
+    assert cache == expected_cache
+    assert to_publish == expected_to_publish
+
+
+def test_scrub_cache():
+    """Test scrub_cache()."""
+    item_expiration = int(time.time()) + 60
+    test_cache = {
+        'foo': {
+            'expiration': item_expiration,
+        },
+        'bar': {
+            'expiration': int(time.time()) - 3600,
+        },
+        'lar': {
+            'abc': 'efg',
+        },
+    }
+    expected = {
+        'foo': {
+            'expiration': item_expiration,
         }
-        expected = {
-            'foo': {
-                'expiration': item_expiration,
-            }
-        }
-        gh2slack.scrub_cache(self.logger, test_cache)
-        self.assertEqual(test_cache, expected)
+    }
+
+    logger = logging.getLogger('test')
+    gh2slack.scrub_cache(logger, test_cache)
+
+    assert test_cache == expected
