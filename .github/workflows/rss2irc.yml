@@ -20,10 +20,10 @@ jobs:
     - name: Lint with flake8
       run: |
         pip install -r requirements-ci.txt
-        flake8 --ignore=W503 --application-import-names="app,settings" --import-order-style=pycharm  --show-source --statistics
+        python -m flake8 --ignore=W503 --application-import-names="app,settings" --import-order-style=pycharm  --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
+        python -m flake8 . --count --exit-zero --max-complexity=10 --max-line-length=80 --statistics
     - name: Test with pytest
       run: |
         pip install -r requirements-ci.txt
-        pytest
+        python -m pytest
