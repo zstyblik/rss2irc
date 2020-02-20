@@ -1,1 +1,8 @@
-mock
+-r requirements.txt
+
+flake8
+flake8-docstrings
+flake8-import-order
+pytest
+pytest-localserver
+requests_mock

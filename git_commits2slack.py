@@ -1,25 +1,32 @@
-#!/usr/bin/env python2
-"""2017/Nov/17 @ Zdenek Styblik <stybla@turnovfree.net>
-Desc: Unfortunately, slack integration doesn't allow you to track github
-repositories which aren't yours. Let's work-around it.
+#!/usr/bin/env python3
+"""Post new commits in given git repository to Slack.
+
+Unfortunately Slack integration doesn't allow you to track Github repositories
+which aren't yours. Let's work-around it.
+
+2017/Nov/17 @ Zdenek Styblik <stybla@turnovfree.net>
 """
 import argparse
 import logging
 import os
+import re
 import subprocess
 import sys
+import traceback
+from typing import List
 
-from slackclient import SlackClient
 import rss2irc
 import rss2slack
 
+RE_GIT_AUTD = re.compile(r'^Already up-to-date.$')
+RE_GIT_UPDATING = re.compile(r'^Updating [a-z0-9]+', re.I)
 
-def git_branch(git_clone_dir):
+
+def git_branch(git_clone_dir: str) -> str:
     """Run % git branch; and return name of current branch.
 
-    :type git_clone_dir: str
-
-    :rtype: str
+    :raises: `RuntimeError`
+    :raises: `ValueError`
     """
     git_branch_proc = subprocess.Popen(
         ['git', 'branch', '--no-color'],
@@ -31,26 +38,22 @@ def git_branch(git_clone_dir):
     retcode = git_branch_proc.returncode
     if retcode != 0:
         raise RuntimeError(
-            'git branch has returned {:d}, err: {}'.format(retcode, err)
+            'git branch has returned {:d}, err: {:s}'.format(
+                retcode, err.decode('utf-8')
+            )
         )
 
-    branch_name = ''
-    for line in out.splitlines():
+    for line in out.decode('utf-8').splitlines():
         if line.startswith('*'):
-            branch_name = line.strip().split(' ', 1)[1]
-            break
+            return line.strip().split(' ', 1)[1]
 
-    if not branch_name:
-        raise ValueError('Failed to get branch name.')
-
-    return branch_name
+    raise ValueError('Failed to get branch name.')
 
 
-def git_clone(git_clone_dir, git_repo):
+def git_clone(git_clone_dir: str, git_repo: str) -> None:
     """Clone given git repository into given directory.
 
-    :type git_clone_dir: str
-    :type git_repo: str
+    :raises: `RuntimeError`
     """
     git_clone_proc = subprocess.Popen(
         ['git', 'clone', git_repo, git_clone_dir],
@@ -61,106 +64,118 @@ def git_clone(git_clone_dir, git_repo):
     retcode = git_clone_proc.returncode
     if retcode != 0:
         raise RuntimeError(
-            'git clone has returned {:d}, err: {}'.format(retcode, err)
+            'git clone has returned {:d}, err: {:s}'.format(
+                retcode, err.decode('utf-8')
+            )
         )
 
 
-def git_pull(git_clone_dir):
+def git_pull(git_clone_dir: str) -> str:
     """Run % git pull; and return it's stdout.
 
-    :type git_clone_dir: str
+    :raises: `RuntimeError`
     """
-    git_pull_proc = subprocess.Popen(['git', 'pull'],
-                                     stdout=subprocess.PIPE,
-                                     stderr=subprocess.PIPE,
-                                     cwd=git_clone_dir)
+    git_pull_proc = subprocess.Popen(
+        ['git', 'pull'],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=git_clone_dir
+    )
     out, err = git_pull_proc.communicate()
     retcode = git_pull_proc.returncode
     if retcode != 0:
         raise RuntimeError(
-            'git pull has returned {:d}, err: {}'.format(retcode, err)
+            'git pull has returned {:d}, err: {:s}'.format(
+                retcode, err.decode('utf-8')
+            )
         )
 
-    return out
+    return parse_pull_output(out.decode('utf-8'))
 
 
-def git_show(git_clone_dir):
-    """Run % git show; and return commit hash and title as list of tuples.
-
-    :type git_clone_dir: str
-
-    :rtype: list
-    """
+def git_show(git_clone_dir: str, git_ref: str) -> List[str]:
+    """Run % git show; and return commit hash and title as list of tuples."""
     git_show_proc = subprocess.Popen(
-        ['git', 'show', '--pretty=oneline', '-s'],
+        ['git', 'show', '--pretty=oneline', '-s', git_ref],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        cwd=git_clone_dir)
+        cwd=git_clone_dir
+    )
     out, err = git_show_proc.communicate()
     retcode = git_show_proc.returncode
     if retcode != 0:
         raise RuntimeError(
-            'git show has returned {:d}, err: {}'.format(retcode, err)
+            'git show has returned {:d}, err: {:s}'.format(
+                retcode, err.decode('utf-8')
+            )
         )
 
-    return parse_commits(out)
+    return parse_commits(out.decode('utf-8'))
 
 
 def main():
-    """Main."""
+    """Post new commits in given repository to Slack."""
     logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
     logger = logging.getLogger('git-commits2slack')
     args = parse_args()
     if args.verbosity:
         logger.setLevel(logging.DEBUG)
 
-    slack_token = rss2slack.get_slack_token()
+    try:
+        slack_token = rss2slack.get_slack_token()
 
-    if not os.path.isdir(args.git_clone_dir):
-        git_clone(args.git_clone_dir, args.git_repo)
+        if not os.path.isdir(args.git_clone_dir):
+            git_clone(args.git_clone_dir, args.git_repo)
 
-    os.chdir(args.git_clone_dir)
-    out = git_pull(args.git_clone_dir)
-    if out.startswith('Already up-to-date.'):
-        logger.info('No new commits.')
-        sys.exit(0)
+        os.chdir(args.git_clone_dir)
+        commit_ref = git_pull(args.git_clone_dir)
+        if not commit_ref:
+            logger.info('No new commits.')
+            sys.exit(0)
 
-    commits = git_show(args.git_clone_dir)
-    if not commits:
-        logger.warning('There should be new commits, but we have none.')
-        sys.exit(0)
+        commits = git_show(args.git_clone_dir, commit_ref)
+        if not commits:
+            # FIXME(zstyblik): error? send message to Slack?
+            logger.warning('There should be new commits, but we have none.')
+            sys.exit(0)
 
-    repo_name = os.path.basename(args.git_clone_dir)
-    branch_name = git_branch(args.git_clone_dir)
-    commit_count = len(commits)
-    if commit_count > 1:
-        suffix = 's'
-    else:
-        suffix = ''
+        repo_name = os.path.basename(args.git_clone_dir)
+        branch_name = git_branch(args.git_clone_dir)
+        commit_count = len(commits)
+        if commit_count > 1:
+            suffix = 's'
+        else:
+            suffix = ''
 
-    messages = [
-        '<{}/commit/{}|{}> {}'.format(
-            args.git_web, commit[0], commit[0], commit[1]
+        messages = [
+            '<{}/commit/{}|{}> {}'.format(
+                args.git_web, commit[0], commit[0], commit[1]
+            )
+            for commit in commits
+        ]
+        heading = '<{}/tree/{}|[{}:{}]> {:d} commit{}'.format(
+            args.git_web, branch_name, repo_name, branch_name, commit_count,
+            suffix
         )
-        for commit in commits
-    ]
-    heading = '<{}/tree/{}|[{}:{}]> {:d} commit{}'.format(
-        args.git_web, branch_name, repo_name, branch_name, commit_count, suffix
-    )
-    messages.insert(0, heading)
+        messages.insert(0, heading)
 
-    slack_client = SlackClient(slack_token)
-    rss2slack.post_to_slack(
-        logger, '\n'.join(messages), slack_client, args.slack_channel,
-        args.slack_timeout
-    )
+        slack_client = rss2slack.get_slack_web_client(
+            slack_token, args.slack_base_url, args.slack_timeout
+        )
+        rss2slack.post_to_slack(
+            logger, '\n'.join(messages), slack_client, args.slack_channel,
+        )
+    except Exception:
+        logger.debug(traceback.format_exc())
+        # TODO(zstyblik):
+        # 1. touch error file
+        # 2. send error message to the channel
+    finally:
+        sys.exit(0)
 
 
-def parse_args():
-    """Return parsed CLI args.
-
-    :rtype: `argparse.Namespace`
-    """
+def parse_args() -> argparse.Namespace:
+    """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--git-clone-dir',
@@ -178,16 +193,23 @@ def parse_args():
         help='git web interface, resp. base URL, for given repository.'
     )
     parser.add_argument(
+        '--slack-base-url',
+        dest='slack_base_url', type=str,
+        default=rss2slack.SLACK_BASE_URL,
+        help='Base URL for Slack client.'
+    )
+    parser.add_argument(
         '--slack-channel',
         dest='slack_channel', type=str, required=True,
-        help='Name of slack channel to send formatted news to.'
+        help='Name of Slack channel to send formatted news to.'
     )
     parser.add_argument(
         '--slack-timeout',
         dest='slack_timeout', type=int,
         default=rss2irc.HTTP_TIMEOUT,
-        help=('slack API Timeout. Defaults to %i seconds.'
-              % rss2irc.HTTP_TIMEOUT)
+        help='Slack API Timeout. Defaults to {:d} seconds.'.format(
+            rss2irc.HTTP_TIMEOUT
+        )
     )
     parser.add_argument(
         '--sleep',
@@ -203,19 +225,27 @@ def parse_args():
     return parser.parse_args()
 
 
-def parse_commits(output):
+def parse_commits(output: str) -> List[str]:
     """Return commit hash and title as list of tuples.
 
-    :type output: str
     :param output: Output of % git show; command.
-
-    :rtype: list
     """
     return [
         line.strip().split(' ', 1)
         for line in output.splitlines()
         if line.strip() != ''
     ]
+
+
+def parse_pull_output(output: str) -> str:
+    """Parse output of % git pull; and return git reference."""
+    for line in output.splitlines():
+        if RE_GIT_AUTD.search(line.strip()):
+            return ''
+        elif RE_GIT_UPDATING.search(line.strip()):
+            return line.split(' ')[1]
+
+    return ''
 
 
 if __name__ == '__main__':
