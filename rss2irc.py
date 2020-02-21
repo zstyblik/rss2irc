@@ -240,7 +240,7 @@ def write_data(
         sleep: int = 2
 ) -> None:
     """Write data into file."""
-    with open(output, 'ab') as fhandle:
+    with open(output, 'wb') as fhandle:
         for url in list(data.keys()):
             message = format_message(url, data[url], handle)
             try:
