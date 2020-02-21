@@ -44,9 +44,12 @@ def get_rss(
         logger: logging.Logger, url: str, timeout: int = HTTP_TIMEOUT
 ) -> str:
     """Return body of given URL as a string."""
-    # TODO(zstyblik): randomize user agent
+    # Randomize user agent, because CF likes to block for no apparent reason.
     logger.debug('Get %s', url)
-    rsp = requests.get(url, timeout=timeout)
+    user_agent = 'rss2irc_{:d}'.format(int(time.time()))
+    rsp = requests.get(
+        url, timeout=timeout, headers={'User-Agent': user_agent}
+    )
     logger.debug('Got HTTP Status Code: %i', rsp.status_code)
     rsp.raise_for_status()
     data = rsp.text
