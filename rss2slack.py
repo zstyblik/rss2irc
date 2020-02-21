@@ -47,15 +47,12 @@ def main():
 
     try:
         slack_token = get_slack_token()
-        news = {}
-        for rss_url in args.rss_urls:
-            data = rss2irc.get_rss(logger, rss_url, args.rss_http_timeout)
-            if not data:
-                logger.error('Failed to get RSS from %s', rss_url)
-                sys.exit(1)
+        data = rss2irc.get_rss(logger, args.rss_url, args.rss_http_timeout)
+        if not data:
+            logger.error('Failed to get RSS from %s', args.rss_url)
+            sys.exit(1)
 
-            rss2irc.parse_news(data, news)
-
+        news = rss2irc.parse_news(data)
         if not news:
             logger.info('No news?')
             sys.exit(0)
@@ -127,7 +124,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--rss-url',
-        dest='rss_urls', action='append', required=True,
+        dest='rss_url', type=str, required=True,
         help='URL of RSS Feed.'
     )
     parser.add_argument(

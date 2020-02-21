@@ -73,15 +73,12 @@ def main():
         slack_token = rss2slack.get_slack_token()
         authors = get_authors_from_file(logger, args.authors_file)
 
-        news = {}
-        for rss_url in args.rss_urls:
-            data = rss2irc.get_rss(logger, rss_url, args.rss_http_timeout)
-            if not data:
-                logger.error('Failed to get RSS from %s', rss_url)
-                sys.exit(1)
+        data = rss2irc.get_rss(logger, args.rss_url, args.rss_http_timeout)
+        if not data:
+            logger.error('Failed to get RSS from %s', args.rss_url)
+            sys.exit(1)
 
-            parse_news(data, news, authors)
-
+        news = parse_news(data, authors)
         if not news:
             logger.info('No news?')
             sys.exit(0)
@@ -163,7 +160,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--rss-url',
-        dest='rss_urls', action='append', required=True,
+        dest='rss_url', type=str, required=True,
         help='URL of RSS Feed.'
     )
     parser.add_argument(
@@ -205,11 +202,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def parse_news(data: str, news: Dict, authors: List[str]) -> None:
+def parse_news(data: str, authors: List[str]) -> Dict:
     """Parse-out link and title out of XML."""
-    if not isinstance(news, dict):
-        raise ValueError
-
+    news = {}
     feed = feedparser.parse(data)
     for entry in feed['entries']:
         link = entry.pop('link', None)
@@ -236,6 +231,8 @@ def parse_news(data: str, news: Dict, authors: List[str]) -> None:
             'category': category,
             'comments_cnt': int(comments_cnt),
         }
+
+    return news
 
 
 def scrub_cache(logger: logging.Logger, cache: Dict) -> None:

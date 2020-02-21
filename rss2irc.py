@@ -44,9 +44,12 @@ def get_rss(
         logger: logging.Logger, url: str, timeout: int = HTTP_TIMEOUT
 ) -> str:
     """Return body of given URL as a string."""
-    # TODO(zstyblik): randomize user agent
+    # Randomize user agent, because CF likes to block for no apparent reason.
     logger.debug('Get %s', url)
-    rsp = requests.get(url, timeout=timeout)
+    user_agent = 'rss2irc_{:d}'.format(int(time.time()))
+    rsp = requests.get(
+        url, timeout=timeout, headers={'User-Agent': user_agent}
+    )
     logger.debug('Got HTTP Status Code: %i', rsp.status_code)
     rsp.raise_for_status()
     data = rsp.text
@@ -71,15 +74,12 @@ def main():
         sys.exit(1)
 
     try:
-        news = {}
-        for rss_url in args.rss_urls:
-            data = get_rss(logger, rss_url, args.rss_http_timeout)
-            if not data:
-                logger.error('Failed to get RSS from %s', rss_url)
-                continue
+        data = get_rss(logger, args.rss_url, args.rss_http_timeout)
+        if not data:
+            logger.error('Failed to get RSS from %s', args.rss_url)
+            sys.exit(1)
 
-            parse_news(data, news)
-
+        news = parse_news(data)
         if not news:
             logger.info('No news?')
             sys.exit(0)
@@ -121,7 +121,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--rss-url',
-        dest='rss_urls', action='append', required=True,
+        dest='rss_url', type=str, required=True,
         help='URL of RSS Feed.'
     )
     parser.add_argument(
@@ -164,11 +164,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def parse_news(data: str, news: Dict[str, Tuple[str, str]]) -> None:
+def parse_news(data: str) -> Dict[str, Tuple[str, str]]:
     """Parse-out link and title out of XML."""
-    if not isinstance(news, dict):
-        raise ValueError
-
+    news = {}
     feed = feedparser.parse(data)
     for entry in feed['entries']:
         link = entry.pop('link', '')
@@ -178,6 +176,8 @@ def parse_news(data: str, news: Dict[str, Tuple[str, str]]) -> None:
 
         category = entry.pop('category', '')
         news[link] = (title, category)
+
+    return news
 
 
 def read_cache(logger: logging.Logger, cache_file: str) -> Dict:
@@ -240,7 +240,7 @@ def write_data(
         sleep: int = 2
 ) -> None:
     """Write data into file."""
-    with open(output, 'ab') as fhandle:
+    with open(output, 'wb') as fhandle:
         for url in list(data.keys()):
             message = format_message(url, data[url], handle)
             try:
