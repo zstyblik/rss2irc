@@ -112,7 +112,7 @@ def test_main_ideal(
     # Check cache and keys in it
     cache = rss2irc.read_cache(logger, fixture_cache_file)
     print('Cache: {}'.format(cache))
-    assert list(cache.keys()) == expected_cache_keys
+    assert list(cache.items.keys()) == expected_cache_keys
     # check output file
     assert sorted(output) == sorted(expected_output)
 
@@ -124,13 +124,15 @@ def test_scrub_cache():
     logger.disabled = True
 
     item_expiration = int(time.time()) + 60
-    test_cache = {
-        'foo': item_expiration,
-        'bar': int(time.time()) - 3600,
-        'lar': 'efg',
-    }
+    test_cache = rss2irc.CachedData(
+        items={
+            'foo': item_expiration,
+            'bar': int(time.time()) - 3600,
+            'lar': 'efg',
+        }
+    )
     expected = {
         'foo': item_expiration,
     }
     rss2irc.scrub_cache(logger, test_cache)
-    assert test_cache == expected
+    assert test_cache.items == expected

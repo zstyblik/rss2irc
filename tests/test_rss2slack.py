@@ -102,7 +102,7 @@ def test_main_ideal(
     logger = logging.getLogger('test')
     cache = rss2irc.read_cache(logger, fixture_cache_file)
     print('Cache: {}'.format(cache))
-    assert list(cache.keys()) == expected_cache_keys
+    assert list(cache.items.keys()) == expected_cache_keys
     # Check HTTP RSS mock
     assert mock_http_rss.called is True
     assert mock_http_rss.call_count == 1

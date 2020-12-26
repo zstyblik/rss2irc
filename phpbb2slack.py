@@ -87,14 +87,14 @@ def main():
         scrub_cache(logger, cache)
 
         for key in list(news.keys()):
-            if key not in cache:
+            if key not in cache.items:
                 continue
 
             logger.debug('Key %s found in cache', key)
-            comments_cached = int(cache[key]['comments_cnt'])
+            comments_cached = int(cache.items[key]['comments_cnt'])
             comments_actual = int(news[key]['comments_cnt'])
             if comments_cached == comments_actual:
-                cache[key]['expiration'] = (
+                cache.items[key]['expiration'] = (
                     int(time.time()) + args.cache_expiration
                 )
                 news.pop(key)
@@ -235,28 +235,31 @@ def parse_news(data: str, authors: List[str]) -> Dict:
     return news
 
 
-def scrub_cache(logger: logging.Logger, cache: Dict) -> None:
+def scrub_cache(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = int(time.time())
-    for key in list(cache.keys()):
+    for key in list(cache.items.keys()):
         try:
-            expiration = int(cache[key]['expiration'])
+            expiration = int(cache.items[key]['expiration'])
         except (KeyError, ValueError):
             logger.error(traceback.format_exc())
-            logger.error("Invalid cache entry will be removed: '%s'",
-                         cache[key])
-            cache.pop(key)
+            logger.error(
+                "Invalid cache entry will be removed: '%s'", cache.items[key]
+            )
+            cache.items.pop(key)
             continue
 
         if expiration < time_now:
             logger.debug('URL %s has expired.', key)
-            cache.pop(key)
+            cache.items.pop(key)
 
 
-def update_cache(cache: Dict, news: Dict, expiration: int) -> None:
+def update_cache(
+        cache: rss2irc.CachedData, news: Dict, expiration: int
+) -> None:
     """Update cache contents."""
     for key in list(news.keys()):
-        cache[key] = {
+        cache.items[key] = {
             'expiration': expiration,
             'comments_cnt': int(news[key]['comments_cnt']),
         }
