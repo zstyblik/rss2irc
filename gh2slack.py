@@ -140,7 +140,7 @@ def main():
                 slack_token, args.slack_base_url, args.slack_timeout
             )
             for html_url in to_publish:
-                cache_item = cache[html_url]
+                cache_item = cache.items[html_url]
                 try:
                     message = assembly_slack_message(
                         logger, args.gh_owner, args.gh_repo,
@@ -151,7 +151,7 @@ def main():
                     )
                 except Exception:
                     logger.error(traceback.format_exc())
-                    cache.pop(html_url)
+                    cache.items.pop(html_url)
                 finally:
                     time.sleep(args.sleep)
 
@@ -235,7 +235,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def process_page_items(
-        logger: logging.Logger, cache: Dict, pages: List,
+        logger: logging.Logger, cache: rss2irc.CachedData, pages: List,
         expiration: int, repository_url: str
 ) -> Set:
     """Parse page items, update cache and return items to publish.
@@ -256,8 +256,8 @@ def process_page_items(
                 logger.debug("Item doesn't have required fields: %s", item)
                 continue
 
-            if item['html_url'] in cache:
-                cache[item['html_url']]['expiration'] = expiration
+            if item['html_url'] in cache.items:
+                cache.items[item['html_url']]['expiration'] = expiration
                 continue
 
             try:
@@ -266,7 +266,7 @@ def process_page_items(
                 logger.error('Failed to convert %s to int.', item['number'])
                 item_number = 0
 
-            cache[item['html_url']] = {
+            cache.items[item['html_url']] = {
                 'expiration': expiration,
                 'number': item_number,
                 'repository_url': repository_url,
@@ -277,22 +277,22 @@ def process_page_items(
     return to_publish
 
 
-def scrub_cache(logger: logging.Logger, cache: Dict) -> None:
+def scrub_cache(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = int(time.time())
-    for key in list(cache.keys()):
+    for key in list(cache.items.keys()):
         try:
-            expiration = int(cache[key]['expiration'])
+            expiration = int(cache.items[key]['expiration'])
         except (KeyError, ValueError):
             logger.error(traceback.format_exc())
             logger.error("Invalid cache entry will be removed: '%s'",
-                         cache[key])
-            cache.pop(key)
+                         cache.items[key])
+            cache.items.pop(key)
             continue
 
         if expiration < time_now:
             logger.debug('URL %s has expired.', key)
-            cache.pop(key)
+            cache.items.pop(key)
 
 
 if __name__ == '__main__':

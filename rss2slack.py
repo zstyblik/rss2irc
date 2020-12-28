@@ -61,9 +61,9 @@ def main():
         rss2irc.scrub_cache(logger, cache)
 
         for key in list(news.keys()):
-            if key in cache:
+            if key in cache.items:
                 logger.debug('Key %s found in cache', key)
-                cache[key] = int(time.time()) + args.cache_expiration
+                cache.items[key] = int(time.time()) + args.cache_expiration
                 news.pop(key)
 
         slack_client = get_slack_web_client(
@@ -84,7 +84,7 @@ def main():
 
         expiration = int(time.time()) + args.cache_expiration
         for key in list(news.keys()):
-            cache[key] = expiration
+            cache.items[key] = expiration
 
         rss2irc.write_cache(cache, args.cache)
         # TODO(zstyblik): remove error file

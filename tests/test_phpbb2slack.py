@@ -164,7 +164,7 @@ def test_main_ideal(
     logger = logging.getLogger('test')
     cache = rss2irc.read_cache(logger, fixture_cache_file)
     print('Cache: {}'.format(cache))
-    assert list(cache.keys()) == expected_cache_keys
+    assert list(cache.items.keys()) == expected_cache_keys
     # Check HTTP RSS mock
     assert mock_http_rss.called is True
     assert mock_http_rss.call_count == 1
@@ -178,31 +178,33 @@ def test_main_ideal(
     'cache,expected_cache',
     [
         (
+            rss2irc.CachedData(
+                items={
+                    'foo': {
+                        'expiration': get_item_expiration() + 60,
+                    },
+                    'bar': {
+                        'expiration': get_item_expiration() - 3600,
+                    },
+                    'lar': {
+                        'abc': 'efg',
+                    },
+                }
+            ),
             {
                 'foo': {
                     'expiration': get_item_expiration() + 60,
                 },
-                'bar': {
-                    'expiration': get_item_expiration() - 3600,
-                },
-                'lar': {
-                    'abc': 'efg',
-                },
             },
-            {
-                'foo': {
-                    'expiration': get_item_expiration() + 60,
-                },
-            },
-        ),
-    ],
+        )
+    ]
 )
 def test_scrub_cache(cache, expected_cache):
     """Test scrub_cache()."""
     logger = logging.getLogger()
     logger.disabled = True
     phpbb2slack.scrub_cache(logger, cache)
-    assert cache == expected_cache
+    assert cache.items == expected_cache
 
 
 @pytest.mark.parametrize(
@@ -217,12 +219,14 @@ def test_scrub_cache(cache, expected_cache):
                     'comments_cnt': 20,
                 },
             },
-            {
-                'http://example.com': {
-                    'expiration': 0,
-                    'comments_cnt': 1,
-                },
-            },
+            rss2irc.CachedData(
+                items={
+                    'http://example.com': {
+                        'expiration': 0,
+                        'comments_cnt': 1,
+                    },
+                }
+            ),
             {
                 'http://example.com': {
                     'expiration': get_item_expiration() + 60,
@@ -234,12 +238,12 @@ def test_scrub_cache(cache, expected_cache):
                 },
             },
             get_item_expiration() + 60,
-        ),
-    ],
+        )
+    ]
 )
 def test_update_cache(
         news, cache, expected_cache, item_expiration
 ):
     """Test update_cache()."""
     phpbb2slack.update_cache(cache, news, item_expiration)
-    assert cache == expected_cache
+    assert cache.items == expected_cache

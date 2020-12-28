@@ -8,8 +8,10 @@ import sys
 import time
 from unittest.mock import call, patch
 
-import gh2slack
-import rss2irc
+import pytest
+
+import gh2slack  # noqa:I100,I202
+import rss2irc  # noqa:I100,I202
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -36,18 +38,24 @@ class MockedResponse:
         return self.response
 
 
-def test_assembly_slack_message():
+@pytest.mark.parametrize(
+    'cache_item,expected_message',
+    [
+        (
+            {
+                'number': 99,
+                'repository_url': 'http://repo-url.example.com',
+                'title': 'Some title',
+            },
+            (
+                '[<http://repo-url.example.com|owner/repo>] '
+                '<http://example.com|section#99> | Some title'
+            )
+        )
+    ]
+)
+def test_assembly_slack_message(cache_item, expected_message):
     """Test assembly_slack_message()."""
-    cache_item = {
-        'number': 99,
-        'repository_url': 'http://repo-url.example.com',
-        'title': 'Some title',
-    }
-    expected_message = (
-        '[<http://repo-url.example.com|owner/repo>] '
-        '<http://example.com|section#99> | Some title'
-    )
-
     logger = logging.getLogger('test')
     message = gh2slack.assembly_slack_message(
         logger, 'owner', 'repo', 'section', 'http://example.com',
@@ -194,7 +202,7 @@ def test_main_ideal(
     logger = logging.getLogger('test')
     cache = rss2irc.read_cache(logger, fixture_cache_file)
     print('Cache: {}'.format(cache))
-    assert list(cache.keys()) == expected_cache_keys
+    assert list(cache.items.keys()) == expected_cache_keys
     # Check HTTP RSS mock
     assert mock_http_rss.called is True
     assert mock_http_rss.call_count == 1
@@ -223,14 +231,16 @@ def test_process_page_items():
         ],
     ]
     repository_url = 'http://example.com'
-    cache = {
-        'http://example.com/bar': {
-            'expiration': 0,
-            'number': 1,
-            'repository_url': repository_url,
-            'title': 'some title#2',
-        },
-    }
+    cache = rss2irc.CachedData(
+        items={
+            'http://example.com/bar': {
+                'expiration': 0,
+                'number': 1,
+                'repository_url': repository_url,
+                'title': 'some title#2',
+            }
+        }
+    )
     expiration = 20
 
     expected_cache = {
@@ -254,24 +264,26 @@ def test_process_page_items():
         logger, cache, pages, expiration, repository_url
     )
 
-    assert cache == expected_cache
+    assert cache.items == expected_cache
     assert to_publish == expected_to_publish
 
 
 def test_scrub_cache():
     """Test scrub_cache()."""
     item_expiration = int(time.time()) + 60
-    test_cache = {
-        'foo': {
-            'expiration': item_expiration,
-        },
-        'bar': {
-            'expiration': int(time.time()) - 3600,
-        },
-        'lar': {
-            'abc': 'efg',
-        },
-    }
+    test_cache = rss2irc.CachedData(
+        items={
+            'foo': {
+                'expiration': item_expiration,
+            },
+            'bar': {
+                'expiration': int(time.time()) - 3600,
+            },
+            'lar': {
+                'abc': 'efg',
+            },
+        }
+    )
     expected = {
         'foo': {
             'expiration': item_expiration,
@@ -281,4 +293,4 @@ def test_scrub_cache():
     logger = logging.getLogger('test')
     gh2slack.scrub_cache(logger, test_cache)
 
-    assert test_cache == expected
+    assert test_cache.items == expected

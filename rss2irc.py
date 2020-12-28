@@ -11,6 +11,7 @@ import signal
 import sys
 import time
 import traceback
+from dataclasses import dataclass, field
 from typing import BinaryIO, Dict, Tuple
 
 import feedparser
@@ -18,6 +19,13 @@ import requests
 
 EXPIRATION = 86400  # seconds
 HTTP_TIMEOUT = 30  # seconds
+
+
+@dataclass
+class CachedData:
+    """CachedData represents locally cached data and state."""
+
+    items: dict = field(default_factory=dict)
 
 
 def format_message(
@@ -88,9 +96,9 @@ def main():
         scrub_cache(logger, cache)
 
         for key in list(news.keys()):
-            if key in cache:
+            if key in cache.items:
                 logger.debug('Key %s found in cache', key)
-                cache[key] = int(time.time()) + args.cache_expiration
+                cache.items[key] = int(time.time()) + args.cache_expiration
                 news.pop(key)
 
         if not args.cache_init:
@@ -98,7 +106,7 @@ def main():
 
         expiration = int(time.time()) + args.cache_expiration
         for key in list(news.keys()):
-            cache[key] = expiration
+            cache.items[key] = expiration
 
         write_cache(cache, args.cache)
         # TODO(zstyblik): remove error file
@@ -180,21 +188,21 @@ def parse_news(data: str) -> Dict[str, Tuple[str, str]]:
     return news
 
 
-def read_cache(logger: logging.Logger, cache_file: str) -> Dict:
+def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
     """Read file with Py pickle in it."""
     if not cache_file:
-        return {}
+        return CachedData()
 
     if not os.path.exists(cache_file):
         logger.warn("Cache file '%s' doesn't exist.", cache_file)
-        return {}
+        return CachedData()
 
     with open(cache_file, 'rb') as fhandle:
         try:
             cache = pickle.load(fhandle)
         except EOFError:
             # Note: occurred with empty file.
-            cache = {}
+            cache = CachedData()
             logger.debug(
                 'Cache file is probably empty: %s', traceback.format_exc()
             )
@@ -203,22 +211,23 @@ def read_cache(logger: logging.Logger, cache_file: str) -> Dict:
     return cache
 
 
-def scrub_cache(logger: logging.Logger, cache: Dict) -> None:
+def scrub_cache(logger: logging.Logger, cache: CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = time.time()
-    for key in list(cache.keys()):
+    for key in list(cache.items.keys()):
         try:
-            expiration = int(cache[key])
+            expiration = int(cache.items[key])
         except ValueError:
             logger.error(traceback.format_exc())
-            logger.error("Invalid cache entry will be removed: '%s'",
-                         cache[key])
-            cache.pop(key)
+            logger.error(
+                "Invalid cache entry will be removed: '%s'", cache.items[key]
+            )
+            cache.items.pop(key)
             continue
 
         if expiration < time_now:
             logger.debug('URL %s has expired.', key)
-            cache.pop(key)
+            cache.items.pop(key)
 
 
 def signal_handler(signum, frame):
@@ -226,7 +235,7 @@ def signal_handler(signum, frame):
     raise ValueError
 
 
-def write_cache(data: Dict, cache_file: str) -> None:
+def write_cache(data: CachedData, cache_file: str) -> None:
     """Dump data into file as a pickle."""
     if not cache_file:
         return
