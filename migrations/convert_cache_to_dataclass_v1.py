@@ -9,17 +9,19 @@ Migration:
 """
 import argparse
 import logging
+import os
 import pickle
 import shutil
 import sys
-from dataclasses import dataclass, field
+from importlib.machinery import SourceFileLoader
 
-
-@dataclass
-class CachedData:
-    """CachedData represents locally cached data and state."""
-
-    items: dict = field(default_factory=dict)
+# NOTICE: An ugly hack in order to be able to import CachedData class from
+# rss2irc. I'm real sorry about this, son.
+# NOTE: Sadly, importlib.util and spec didn't cut it. Also, I'm out of time on
+# this. Therefore, see you again in the future once this ceases to work.
+SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
+rss2irc_module_path = os.path.join(SCRIPT_PATH, '..', 'rss2irc.py')
+rss2irc = SourceFileLoader('rss2irc', rss2irc_module_path).load_module()
 
 
 def main():
@@ -48,7 +50,7 @@ def main():
     logger.info("Create backup file '%s' from '%s'.", bak_file, args.cache)
     shutil.copy2(args.cache, bak_file)
 
-    new_cache = CachedData()
+    new_cache = rss2irc.CachedData()
     for key, value in cache.items():
         new_cache.items[key] = value
 
