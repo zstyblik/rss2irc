@@ -43,8 +43,10 @@ def test_format_message(url, msg_attrs, handle, expected):
     assert result == expected
 
 
+@patch('rss2irc.stat.S_ISFIFO')
 def test_main_ideal(
-        fixture_http_server, fixture_cache_file, fixture_output_file
+        mock_s_isfifo, fixture_http_server, fixture_cache_file,
+        fixture_output_file
 ):
     """End-to-end test - ideal environment."""
     handle = 'test'
@@ -68,6 +70,8 @@ def test_main_ideal(
     rss_fname = os.path.join(SCRIPT_PATH, 'files', 'rss.xml')
     with open(rss_fname, 'rb') as fhandle:
         fixture_http_server.serve_content(fhandle.read().decode('utf-8'), 200)
+
+    mock_s_isfifo.return_value = True
 
     rss_url = fixture_http_server.url
 

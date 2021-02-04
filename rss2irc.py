@@ -8,6 +8,7 @@ import logging
 import os
 import pickle
 import signal
+import stat
 import sys
 import time
 import traceback
@@ -271,6 +272,11 @@ def write_message(
     signal.signal(signal.SIGALRM, signal_handler)
     signal.alarm(5)
     try:
+        fhandle_stat = os.fstat(fhandle.fileno())
+        is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
+        if not is_fifo:
+            raise ValueError('fhandle is expected to be a FIFO pipe')
+
         logger.debug('Will write %s', repr(message))
         fhandle.write(message.encode('utf-8'))
         signal.alarm(0)
