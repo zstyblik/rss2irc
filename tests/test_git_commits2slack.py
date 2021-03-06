@@ -24,6 +24,114 @@ def fixture_git_dir():
         pass
 
 
+@pytest.mark.parametrize(
+    'git_web_url,commit_hash,commit_message,expected',
+    [
+        (
+            'http://example.com',
+            '1234567890',
+            'test messsage',
+            {
+                'type': 'section',
+                'text': {
+                    'text': (
+                        '* test messsage | '
+                        '<http://example.com/commit/1234567890|123456>'
+                    ),
+                    'type': 'mrkdwn'
+                },
+            }
+        ),
+        (
+            'http://example.com',
+            '1234',
+            'test messsage',
+            {
+                'type': 'section',
+                'text': {
+                    'text': (
+                        '* test messsage | '
+                        '<http://example.com/commit/1234|1234>'
+                    ),
+                    'type': 'mrkdwn'
+                },
+            }
+        ),
+    ]
+)
+def test_format_commit_message(
+        git_web_url, commit_hash, commit_message, expected
+):
+    """Test format_commit_message()."""
+    result = git_commits2slack.format_commit_message(
+        git_web_url, commit_hash, commit_message
+    )
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    'git_web_url,branch_name,repo_name,commit_count,expected',
+    [
+        (
+            'http://example.com',
+            'mybranch',
+            'myrepo',
+            1,
+            {
+                'type': 'section',
+                'text': {
+                    'text': (
+                        '<http://example.com/tree/mybranch|[myrepo:mybranch]>'
+                        ' 1 commit'
+                    ),
+                    'type': 'mrkdwn',
+                },
+            }
+        ),
+        (
+            'http://example.com',
+            'mybranch',
+            'myrepo',
+            2,
+            {
+                'type': 'section',
+                'text': {
+                    'text': (
+                        '<http://example.com/tree/mybranch|[myrepo:mybranch]>'
+                        ' 2 commits'
+                    ),
+                    'type': 'mrkdwn',
+                },
+            }
+        ),
+        (
+            'http://example.com',
+            'mybranch',
+            'myrepo',
+            10,
+            {
+                'type': 'section',
+                'text': {
+                    'text': (
+                        '<http://example.com/tree/mybranch|[myrepo:mybranch]>'
+                        ' 10 commits'
+                    ),
+                    'type': 'mrkdwn',
+                },
+            }
+        )
+    ]
+)
+def test_format_heading(
+        git_web_url, branch_name, repo_name, commit_count, expected
+):
+    """Test format_heading()."""
+    result = git_commits2slack.format_heading(
+        git_web_url, branch_name, repo_name, commit_count
+    )
+    assert result == expected
+
+
 @patch('subprocess.Popen')
 def test_git_branch(mock_popen):
     """Test git_branch()."""

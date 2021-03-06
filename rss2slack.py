@@ -9,11 +9,39 @@ import os
 import sys
 import time
 import traceback
+from typing import Dict, Tuple
 
 import rss2irc
 from slack import WebClient
 
 SLACK_BASE_URL = WebClient.BASE_URL
+
+
+def format_message(
+        url: str, msg_attrs: Tuple[str, str], handle: str = ''
+) -> Dict:
+    """Return formatted message as Slack's BlockKit section.
+
+    :param url: URL of news item.
+    :param msg_attrs: tuple of title and category.
+    :param handle: Handle of given feed.
+    """
+    if handle:
+        if len(msg_attrs) > 1 and msg_attrs[1]:
+            tag = '[{:s}-{:s}] '.format(handle, msg_attrs[1])
+        else:
+            tag = '[{:s}] '.format(handle)
+
+    else:
+        tag = ''
+
+    return {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': '{}<{}|{}>'.format(tag, url, msg_attrs[0])
+        }
+    }
 
 
 def get_slack_token() -> str:
@@ -72,10 +100,13 @@ def main():
         )
         if not args.cache_init:
             for url in list(news.keys()):
-                message = rss2irc.format_message(url, news[url], args.handle)
+                message = format_message(url, news[url], args.handle)
+                msg_blocks = {
+                    "blocks": [message]
+                }
                 try:
                     post_to_slack(
-                        logger, message, slack_client, args.slack_channel,
+                        logger, msg_blocks, slack_client, args.slack_channel,
                     )
                 except ValueError:
                     news.pop(url)
@@ -169,19 +200,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def post_to_slack(
-        logger: logging.Logger, message: str,
+        logger: logging.Logger, msg_blocks: Dict,
         slack_client: WebClient, slack_channel: str,
 ) -> None:
     """Post news to Slack channel."""
     try:
-        logger.debug('Will post %s', repr(message))
-        slack_client.api_call(
-            'chat.postMessage',
-            json={
-                'channel': slack_channel,
-                'text': message,
-            },
+        logger.debug('Will post %s', repr(msg_blocks))
+        rsp = slack_client.chat_postMessage(
+            channel=slack_channel, blocks=msg_blocks
         )
+        logger.debug('RSP from Slack: %s', rsp)
     except ValueError:
         logger.debug(traceback.format_exc())
         raise

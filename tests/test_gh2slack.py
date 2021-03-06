@@ -47,17 +47,23 @@ class MockedResponse:
                 'repository_url': 'http://repo-url.example.com',
                 'title': 'Some title',
             },
-            (
-                '[<http://repo-url.example.com|owner/repo>] '
-                '<http://example.com|section#99> | Some title'
-            )
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': (
+                        '[<http://repo-url.example.com|owner/repo>] '
+                        '<http://example.com|section#99> | Some title'
+                    )
+                }
+            }
         )
     ]
 )
-def test_assembly_slack_message(cache_item, expected_message):
-    """Test assembly_slack_message()."""
+def test_format_message(cache_item, expected_message):
+    """Test format_message()."""
     logger = logging.getLogger('test')
-    message = gh2slack.assembly_slack_message(
+    message = gh2slack.format_message(
         logger, 'owner', 'repo', 'section', 'http://example.com',
         cache_item
     )

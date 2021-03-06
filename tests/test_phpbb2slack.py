@@ -35,9 +35,16 @@ def get_item_expiration():
                 'title': 'someTitle',
             },
             'handle': 'someHandle',
-            'expected': (
-                '[someHandle-test] someTitle (12) | http://www.example.com\n'
-            ),
+            'expected': {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': (
+                        '[someHandle-test] <http://www.example.com|someTitle>'
+                        ' (12)'
+                    )
+                }
+            },
         },
         {
             'url': 'http://www.example.com',
@@ -47,9 +54,16 @@ def get_item_expiration():
                 'title': 'someTitle',
             },
             'handle': 'someHandle',
-            'expected': (
-                '[someHandle] someTitle (1) | http://www.example.com\n'
-            ),
+            'expected': {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': (
+                        '[someHandle] <http://www.example.com|someTitle>'
+                        ' (1)'
+                    )
+                }
+            },
         },
     ],
 )

@@ -13,13 +13,49 @@ import re
 import subprocess
 import sys
 import traceback
-from typing import List
+from typing import Dict, List
 
 import rss2irc
 import rss2slack
 
 RE_GIT_AUTD = re.compile(r'^Already up-to-date.$')
 RE_GIT_UPDATING = re.compile(r'^Updating [a-z0-9]+', re.I)
+
+
+def format_commit_message(
+        git_web_url: str, commit_hash: str, commit_message: str
+) -> Dict:
+    """Return formatted commit message as Slack's BlockKit section."""
+    return {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': '* {:s} | <{:s}/commit/{:s}|{:s}>'.format(
+                commit_message, git_web_url, commit_hash, commit_hash[0:6]
+            )
+        }
+    }
+
+
+def format_heading(
+        git_web_url: str, branch_name: str, repo_name: str, commit_count: int
+) -> Dict:
+    """Return formatted heading as Slack's BlockKit section."""
+    if commit_count > 1:
+        suffix = 's'
+    else:
+        suffix = ''
+
+    return {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': '<{}/tree/{}|[{}:{}]> {:d} commit{}'.format(
+                git_web_url, branch_name, repo_name, branch_name, commit_count,
+                suffix
+            )
+        }
+    }
 
 
 def git_branch(git_clone_dir: str) -> str:
@@ -142,28 +178,23 @@ def main():
         repo_name = os.path.basename(args.git_clone_dir)
         branch_name = git_branch(args.git_clone_dir)
         commit_count = len(commits)
-        if commit_count > 1:
-            suffix = 's'
-        else:
-            suffix = ''
 
-        messages = [
-            '<{}/commit/{}|{}> {}'.format(
-                args.git_web, commit[0], commit[0], commit[1]
-            )
+        msg_blocks = {"blocks": []}
+        msg_blocks["blocks"] = [
+            format_commit_message(args.git_web, commit[0], commit[1])
             for commit in commits
         ]
-        heading = '<{}/tree/{}|[{}:{}]> {:d} commit{}'.format(
-            args.git_web, branch_name, repo_name, branch_name, commit_count,
-            suffix
+
+        heading = format_heading(
+            args.git_web, branch_name, repo_name, commit_count
         )
-        messages.insert(0, heading)
+        msg_blocks["blocks"].insert(0, heading)
 
         slack_client = rss2slack.get_slack_web_client(
             slack_token, args.slack_base_url, args.slack_timeout
         )
         rss2slack.post_to_slack(
-            logger, '\n'.join(messages), slack_client, args.slack_channel,
+            logger, msg_blocks, slack_client, args.slack_channel,
         )
     except Exception:
         logger.debug(traceback.format_exc())

@@ -24,11 +24,11 @@ DEFAULT_GH_URL = 'github.com'
 RE_LINK_REL_NEXT = re.compile(r'<(?P<next>.*)>; rel="next"')
 
 
-def assembly_slack_message(
+def format_message(
         logger: logging.Logger, owner: str, repo: str, section: str,
         html_url: str, cache_item: Dict
-) -> str:
-    """Return assembled message to be posted on Slack."""
+) -> Dict:
+    """Return formatted message as Slack's BlockKit section."""
     try:
         title = cache_item['title'].encode('utf-8')
     except UnicodeEncodeError:
@@ -48,15 +48,20 @@ def assembly_slack_message(
             section, cache_item['number'], title.decode('utf-8')
         )
     except UnicodeDecodeError:
-        logger.error('Failed to assembly message: %s',
-                     traceback.format_exc())
+        logger.error('Failed to format message: %s', traceback.format_exc())
         message = (
-            '[{:s}/{:s}] Failed to assembly message for {:s}#{:d}'.format(
+            '[{:s}/{:s}] Failed to format message for {:s}#{:d}'.format(
                 owner, repo, section, cache_item['number']
             )
         )
 
-    return message
+    return {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': message,
+        }
+    }
 
 
 def get_gh_api_url(owner: str, repo: str, section: str) -> str:
@@ -142,12 +147,13 @@ def main():
             for html_url in to_publish:
                 cache_item = cache.items[html_url]
                 try:
-                    message = assembly_slack_message(
+                    message = format_message(
                         logger, args.gh_owner, args.gh_repo,
                         ALIASES[args.gh_section], html_url, cache_item
                     )
+                    msg_blocks = {'blocks': [message]}
                     rss2slack.post_to_slack(
-                        logger, message, slack_client, args.slack_channel,
+                        logger, msg_blocks, slack_client, args.slack_channel,
                     )
                 except Exception:
                     logger.error(traceback.format_exc())
