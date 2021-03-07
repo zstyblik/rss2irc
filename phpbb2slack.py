@@ -20,22 +20,29 @@ HTTP_TIMEOUT = 30  # seconds
 
 def format_message(
         url: str, msg_attrs: Dict[str, str], handle: str = ''
-) -> str:
-    """Return pre-formatted message.
+) -> Dict:
+    """Return formatted message as Slack's BlockKit section.
 
     :raises: `KeyError`
     """
-    if not handle:
-        return '{:s}\n'.format(url)
+    if handle:
+        if 'category' in msg_attrs and msg_attrs['category']:
+            tag = '[{:s}-{:s}] '.format(handle, msg_attrs['category'])
+        else:
+            tag = '[{:s}] '.format(handle)
 
-    if 'category' in msg_attrs and msg_attrs['category']:
-        tag = '{:s}-{:s}'.format(handle, msg_attrs['category'])
     else:
-        tag = '{:s}'.format(handle)
+        tag = ''
 
-    return '[{:s}] {:s} ({:d}) | {:s}\n'.format(
-        tag, msg_attrs['title'], msg_attrs['comments_cnt'], url
-    )
+    return {
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': '{:s}<{:s}|{:s}> ({:d})'.format(
+                tag, url, msg_attrs['title'], msg_attrs['comments_cnt']
+            )
+        }
+    }
 
 
 def get_authors_from_file(logger: logging.Logger, fname: str) -> List[str]:
@@ -105,9 +112,12 @@ def main():
         if not args.cache_init:
             for url in list(news.keys()):
                 message = format_message(url, news[url], args.handle)
+                msg_blocks = {
+                    'blocks': [message]
+                }
                 try:
                     rss2slack.post_to_slack(
-                        logger, message, slack_client, args.slack_channel,
+                        logger, msg_blocks, slack_client, args.slack_channel,
                     )
                 except ValueError:
                     news.pop(url)

@@ -6,10 +6,59 @@ import os
 import sys
 from unittest.mock import patch
 
-import rss2irc
-import rss2slack
+import pytest
+
+import rss2irc  # noqa:I100,I202
+import rss2slack  # noqa:I100,I202
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
+
+
+@pytest.mark.parametrize(
+    'url,msg_attrs,handle,expected',
+    [
+        (
+            'http://example.com',
+            ('title', ''),
+            '',
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': '<http://example.com|title>'
+                }
+            }
+        ),
+        (
+            'http://example.com',
+            ('title', None),
+            'handle',
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': '[handle] <http://example.com|title>'
+                }
+            }
+        ),
+        (
+            'http://example.com',
+            ('title', 'category'),
+            'handle',
+            {
+                'type': 'section',
+                'text': {
+                    'type': 'mrkdwn',
+                    'text': '[handle-category] <http://example.com|title>'
+                }
+            }
+        ),
+    ],
+)
+def test_format_message(url, msg_attrs, handle, expected):
+    """Test format_message()."""
+    result = rss2slack.format_message(url, msg_attrs, handle)
+    assert result == expected
 
 
 def test_get_slack_token(monkeypatch):
