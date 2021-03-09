@@ -147,11 +147,12 @@ def main():
             for html_url in to_publish:
                 cache_item = cache.items[html_url]
                 try:
-                    message = format_message(
-                        logger, args.gh_owner, args.gh_repo,
-                        ALIASES[args.gh_section], html_url, cache_item
-                    )
-                    msg_blocks = {'blocks': [message]}
+                    msg_blocks = [
+                        format_message(
+                            logger, args.gh_owner, args.gh_repo,
+                            ALIASES[args.gh_section], html_url, cache_item
+                        )
+                    ]
                     rss2slack.post_to_slack(
                         logger, msg_blocks, slack_client, args.slack_channel,
                     )
