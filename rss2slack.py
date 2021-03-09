@@ -9,7 +9,7 @@ import os
 import sys
 import time
 import traceback
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import rss2irc
 from slack import WebClient
@@ -100,10 +100,9 @@ def main():
         )
         if not args.cache_init:
             for url in list(news.keys()):
-                message = format_message(url, news[url], args.handle)
-                msg_blocks = {
-                    "blocks": [message]
-                }
+                msg_blocks = [
+                    format_message(url, news[url], args.handle)
+                ]
                 try:
                     post_to_slack(
                         logger, msg_blocks, slack_client, args.slack_channel,
@@ -200,7 +199,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def post_to_slack(
-        logger: logging.Logger, msg_blocks: Dict,
+        logger: logging.Logger, msg_blocks: List,
         slack_client: WebClient, slack_channel: str,
 ) -> None:
     """Post news to Slack channel."""
@@ -209,7 +208,9 @@ def post_to_slack(
         rsp = slack_client.chat_postMessage(
             channel=slack_channel, blocks=msg_blocks
         )
-        logger.debug('RSP from Slack: %s', rsp)
+        logger.debug('Response from Slack: %s', rsp)
+        if not rsp or rsp["ok"] is False:
+            raise ValueError("Slack response is not OK.")
     except ValueError:
         logger.debug(traceback.format_exc())
         raise

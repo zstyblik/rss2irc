@@ -179,8 +179,7 @@ def main():
         branch_name = git_branch(args.git_clone_dir)
         commit_count = len(commits)
 
-        msg_blocks = {"blocks": []}
-        msg_blocks["blocks"] = [
+        msg_blocks = [
             format_commit_message(args.git_web, commit[0], commit[1])
             for commit in commits
         ]
@@ -188,7 +187,7 @@ def main():
         heading = format_heading(
             args.git_web, branch_name, repo_name, commit_count
         )
-        msg_blocks["blocks"].insert(0, heading)
+        msg_blocks.insert(0, heading)
 
         slack_client = rss2slack.get_slack_web_client(
             slack_token, args.slack_base_url, args.slack_timeout

@@ -111,10 +111,9 @@ def main():
         )
         if not args.cache_init:
             for url in list(news.keys()):
-                message = format_message(url, news[url], args.handle)
-                msg_blocks = {
-                    'blocks': [message]
-                }
+                msg_blocks = [
+                    format_message(url, news[url], args.handle)
+                ]
                 try:
                     rss2slack.post_to_slack(
                         logger, msg_blocks, slack_client, args.slack_channel,
