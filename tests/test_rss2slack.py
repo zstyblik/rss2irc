@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for rss2slack.py."""
 import io
+import json
 import logging
 import os
 import sys
@@ -93,6 +94,7 @@ def test_main_ideal(
         'http://www.example.com/scan.php?page=news_item&px=item1',
         'http://www.example.com/scan.php?page=news_item&px=item2',
     ]
+    expected_slack_channel = 'test'
 
     # Mock/set SLACK_TOKEN
     monkeypatch.setenv('SLACK_TOKEN', 'test')
@@ -107,6 +109,40 @@ def test_main_ideal(
         '{"ok": "true", "error": ""}', 200,
         {'Content-Type': 'application/json'},
     )
+    fixture_http_server.capture_requests = True
+    expected_slack_requests = [
+        {
+            'blocks': [
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': (
+                            '[test] <http://www.example.com/scan.php?'
+                            + 'page=news_item&px=item1|Item1>'
+                        )
+                    }
+                }
+            ],
+            'channel': expected_slack_channel
+        },
+        {
+            'blocks': [
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': (
+                            '[test] <http://www.example.com/scan.php?'
+                            + 'page=news_item&px=item2|Item2>'
+                        )
+                    }
+                }
+            ],
+            'channel': expected_slack_channel
+        }
+    ]
+    #
     exception = None
     args = [
         './rss2slack.py',
@@ -121,7 +157,7 @@ def test_main_ideal(
         '--slack-base-url',
         fixture_http_server.url,
         '--slack-channel',
-        'test',
+        expected_slack_channel,
         '--slack-timeout',
         '10',
         '-v',
@@ -159,3 +195,13 @@ def test_main_ideal(
     # Check HTTP Slack
     # Note: this is just a shallow check, but it's better than nothing.
     assert len(fixture_http_server.requests) == 2
+
+    req0 = fixture_http_server.captured_requests[0]
+    assert req0[0] == 'POST'
+    data = json.loads(req0[1])
+    assert data == expected_slack_requests[0]
+
+    req1 = fixture_http_server.captured_requests[1]
+    assert req1[0] == 'POST'
+    data = json.loads(req1[1])
+    assert data == expected_slack_requests[1]

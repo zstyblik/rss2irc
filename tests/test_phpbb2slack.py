@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for phpbb2slack.py."""
 import io
+import json
 import logging
 import os
 import sys
@@ -117,6 +118,7 @@ def test_main_ideal(
     expected_cache_keys = [
         'https://phpbb.example.com/threads/something-of-something.424837/',
     ]
+    expected_slack_channel = 'test'
 
     # Mock/set SLACK_TOKEN
     monkeypatch.setenv('SLACK_TOKEN', 'test')
@@ -131,6 +133,26 @@ def test_main_ideal(
         '{"ok": "true", "error": ""}', 200,
         {'Content-Type': 'application/json'},
     )
+    fixture_http_server.capture_requests = True
+    expected_slack_requests = [
+        {
+            'blocks': [
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': (
+                            '[test] <https://phpbb.example.com/threads/'
+                            + 'something-of-something.424837/'
+                            + '|Some other problem> (0)'
+                        )
+                    }
+                }
+            ],
+            'channel': expected_slack_channel
+        }
+    ]
+    #
     authors_file = os.path.join(SCRIPT_PATH, 'files', 'authors.txt')
     exception = None
     args = [
@@ -148,7 +170,7 @@ def test_main_ideal(
         '--slack-base-url',
         fixture_http_server.url,
         '--slack-channel',
-        'test',
+        expected_slack_channel,
         '--slack-timeout',
         '10',
         '-v',
@@ -186,6 +208,11 @@ def test_main_ideal(
     # Check HTTP Slack
     # Note: this is just a shallow check, but it's better than nothing.
     assert len(fixture_http_server.requests) == 1
+
+    req0 = fixture_http_server.captured_requests[0]
+    assert req0[0] == 'POST'
+    data = json.loads(req0[1])
+    assert data == expected_slack_requests[0]
 
 
 @pytest.mark.parametrize(
