@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for git_commits2slack.py."""
 import io
+import json
 import os
 import subprocess
 import sys
@@ -281,6 +282,8 @@ def test_main_ideal(
 ):
     """End-to-end test - ideal environment."""
     git_ref = '85736f4..b183857'
+    repo_name = os.path.basename(fixture_git_dir)
+    expected_slack_channel = 'test'
     mock_branch.return_value = 'master'
     mock_pull.return_value = git_ref
     mock_show.return_value = [
@@ -299,6 +302,38 @@ def test_main_ideal(
         '{"ok": "true", "error": ""}', 200,
         {'Content-Type': 'application/json'},
     )
+    fixture_http_server.capture_requests = True
+    expected_slack_requests = [
+        {
+            'blocks': [
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': (
+                            '<http://example.com/tree/master|'
+                            + '[{}:master]> 1 commit'.format(repo_name)
+                        )
+                    }
+                },
+                {
+                    'type': 'section',
+                    'text': {
+                        'type': 'mrkdwn',
+                        'text': (
+                            '* (HEAD -> 2to3, origin/2to3) Add end-to-end '
+                            + 'test for phpbb2slack.py | '
+                            + '<http://example.com/commit/'
+                            + '5d5b76da52ce3ab5be87f566e8ab117856e7275e|'
+                            + '5d5b76>'
+                        )
+                    }
+                }
+            ],
+            'channel': expected_slack_channel
+        }
+    ]
+    #
     exception = None
     args = [
         './git_commits2slack.py',
@@ -311,7 +346,7 @@ def test_main_ideal(
         '--slack-base-url',
         fixture_http_server.url,
         '--slack-channel',
-        'test',
+        expected_slack_channel,
         '--slack-timeout',
         '10',
         '-v',
@@ -339,3 +374,8 @@ def test_main_ideal(
     # Check HTTP Slack
     # Note: this is just a shallow check, but it's better than nothing.
     assert len(fixture_http_server.requests) == 1
+
+    req0 = fixture_http_server.captured_requests[0]
+    assert req0[0] == 'POST'
+    data = json.loads(req0[1])
+    assert data == expected_slack_requests[0]
