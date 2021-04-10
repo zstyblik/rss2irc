@@ -195,7 +195,7 @@ def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
         return CachedData()
 
     if not os.path.exists(cache_file):
-        logger.warn("Cache file '%s' doesn't exist.", cache_file)
+        logger.warning("Cache file '%s' doesn't exist.", cache_file)
         return CachedData()
 
     with open(cache_file, 'rb') as fhandle:
