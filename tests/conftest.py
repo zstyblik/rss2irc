@@ -26,9 +26,7 @@ class MyContentServer(ContentServer):
         """Intercept HTTP request and store it, if desired."""
         if self.capture_requests:
             request = Request(environ)
-            self.captured_requests.append(
-                (request.method, request.get_data())
-            )
+            self.captured_requests.append((request.method, request.get_data()))
 
         return super(MyContentServer, self).__call__(environ, start_response)
 
