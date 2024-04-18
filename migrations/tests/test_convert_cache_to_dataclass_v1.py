@@ -47,57 +47,61 @@ def fixture_cache_file():
 
 def test_migration(fixture_cache_file, fixture_bak_cleanup):
     """Test migration under ideal conditions."""
-    bak_file = '{}.bak'.format(fixture_cache_file)
+    bak_file = "{}.bak".format(fixture_cache_file)
     _ = fixture_bak_cleanup(bak_file)
 
     test_data = {
-        'test1': 1234,
-        'test2': 0,
+        "test1": 1234,
+        "test2": 0,
     }
-    with open(fixture_cache_file, 'wb') as fhandle:
+    with open(fixture_cache_file, "wb") as fhandle:
         pickle.dump(test_data, fhandle, pickle.HIGHEST_PROTOCOL)
 
     expected_cache = rss2irc.CachedData(
         items={
-            'test1': 1234,
-            'test2': 0,
+            "test1": 1234,
+            "test2": 0,
         }
     )
 
     cmd_migrate = [
-        os.path.join(SCRIPT_PATH, '..', 'convert_cache_to_dataclass_v1.py'),
-        '--cache',
+        os.path.join(SCRIPT_PATH, "..", "convert_cache_to_dataclass_v1.py"),
+        "--cache",
         fixture_cache_file,
     ]
     proc_migrate = subprocess.Popen(
-        cmd_migrate, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        cmd_migrate,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
     out, err = proc_migrate.communicate()
-    print('migrate-cache STDOUT: {}'.format(out))
-    print('migrate-cache STDERR: {}'.format(err))
+    print("migrate-cache STDOUT: {}".format(out))
+    print("migrate-cache STDERR: {}".format(err))
     assert proc_migrate.returncode == 0
 
     assert os.path.exists(bak_file) is True
 
     cmd_read = [
-        os.path.join(SCRIPT_PATH, 'files', 'read_migrated_cache.py'),
-        '--cache',
-        fixture_cache_file
+        os.path.join(SCRIPT_PATH, "files", "read_migrated_cache.py"),
+        "--cache",
+        fixture_cache_file,
     ]
     proc_read_env = os.environ.copy()
     # An ugly hack
-    proc_read_env['PYTHONPATH'] = os.path.join(SCRIPT_PATH, '..', '..')
+    proc_read_env["PYTHONPATH"] = os.path.join(SCRIPT_PATH, "..", "..")
 
     proc_read = subprocess.Popen(
-        cmd_read, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        env=proc_read_env
+        cmd_read,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=proc_read_env,
     )
     out, err = proc_read.communicate()
-    print('read-migrated-cache STDOUT: {}'.format(out))
-    print('read-migrated-cache STDERR: {}'.format(err))
-    assert 'Traceback' not in err.decode('utf-8')
+    print("read-migrated-cache STDOUT: {}".format(out))
+    print("read-migrated-cache STDERR: {}".format(err))
+    assert "Traceback" not in err.decode("utf-8")
     assert proc_read.returncode == 0
 
-    logger = logging.getLogger('pytest')
+    logger = logging.getLogger("pytest")
     migrated_cache = rss2irc.read_cache(logger, fixture_cache_file)
     assert migrated_cache == expected_cache

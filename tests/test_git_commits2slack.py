@@ -26,42 +26,42 @@ def fixture_git_dir():
 
 
 @pytest.mark.parametrize(
-    'git_web_url,commit_hash,commit_message,expected',
+    "git_web_url,commit_hash,commit_message,expected",
     [
         (
-            'http://example.com',
-            '1234567890',
-            'test messsage',
+            "http://example.com",
+            "1234567890",
+            "test messsage",
             {
-                'type': 'section',
-                'text': {
-                    'text': (
-                        '* test messsage | '
-                        '<http://example.com/commit/1234567890|123456>'
+                "type": "section",
+                "text": {
+                    "text": (
+                        "* test messsage | "
+                        "<http://example.com/commit/1234567890|123456>"
                     ),
-                    'type': 'mrkdwn'
+                    "type": "mrkdwn",
                 },
-            }
+            },
         ),
         (
-            'http://example.com',
-            '1234',
-            'test messsage',
+            "http://example.com",
+            "1234",
+            "test messsage",
             {
-                'type': 'section',
-                'text': {
-                    'text': (
-                        '* test messsage | '
-                        '<http://example.com/commit/1234|1234>'
+                "type": "section",
+                "text": {
+                    "text": (
+                        "* test messsage | "
+                        "<http://example.com/commit/1234|1234>"
                     ),
-                    'type': 'mrkdwn'
+                    "type": "mrkdwn",
                 },
-            }
+            },
         ),
-    ]
+    ],
 )
 def test_format_commit_message(
-        git_web_url, commit_hash, commit_message, expected
+    git_web_url, commit_hash, commit_message, expected
 ):
     """Test format_commit_message()."""
     result = git_commits2slack.format_commit_message(
@@ -71,60 +71,60 @@ def test_format_commit_message(
 
 
 @pytest.mark.parametrize(
-    'git_web_url,branch_name,repo_name,commit_count,expected',
+    "git_web_url,branch_name,repo_name,commit_count,expected",
     [
         (
-            'http://example.com',
-            'mybranch',
-            'myrepo',
+            "http://example.com",
+            "mybranch",
+            "myrepo",
             1,
             {
-                'type': 'section',
-                'text': {
-                    'text': (
-                        '<http://example.com/tree/mybranch|[myrepo:mybranch]>'
-                        ' 1 commit'
+                "type": "section",
+                "text": {
+                    "text": (
+                        "<http://example.com/tree/mybranch|[myrepo:mybranch]>"
+                        " 1 commit"
                     ),
-                    'type': 'mrkdwn',
+                    "type": "mrkdwn",
                 },
-            }
+            },
         ),
         (
-            'http://example.com',
-            'mybranch',
-            'myrepo',
+            "http://example.com",
+            "mybranch",
+            "myrepo",
             2,
             {
-                'type': 'section',
-                'text': {
-                    'text': (
-                        '<http://example.com/tree/mybranch|[myrepo:mybranch]>'
-                        ' 2 commits'
+                "type": "section",
+                "text": {
+                    "text": (
+                        "<http://example.com/tree/mybranch|[myrepo:mybranch]>"
+                        " 2 commits"
                     ),
-                    'type': 'mrkdwn',
+                    "type": "mrkdwn",
                 },
-            }
+            },
         ),
         (
-            'http://example.com',
-            'mybranch',
-            'myrepo',
+            "http://example.com",
+            "mybranch",
+            "myrepo",
             10,
             {
-                'type': 'section',
-                'text': {
-                    'text': (
-                        '<http://example.com/tree/mybranch|[myrepo:mybranch]>'
-                        ' 10 commits'
+                "type": "section",
+                "text": {
+                    "text": (
+                        "<http://example.com/tree/mybranch|[myrepo:mybranch]>"
+                        " 10 commits"
                     ),
-                    'type': 'mrkdwn',
+                    "type": "mrkdwn",
                 },
-            }
-        )
-    ]
+            },
+        ),
+    ],
 )
 def test_format_heading(
-        git_web_url, branch_name, repo_name, commit_count, expected
+    git_web_url, branch_name, repo_name, commit_count, expected
 ):
     """Test format_heading()."""
     result = git_commits2slack.format_heading(
@@ -133,19 +133,20 @@ def test_format_heading(
     assert result == expected
 
 
-@patch('subprocess.Popen')
+@patch("subprocess.Popen")
 def test_git_branch(mock_popen):
     """Test git_branch()."""
-    expected_popen_args = ['git', 'branch', '--no-color']
-    expected_branch = '2to3'
-    expected_git_clone_dir = '/no/dir'
+    expected_popen_args = ["git", "branch", "--no-color"]
+    expected_branch = "2to3"
+    expected_git_clone_dir = "/no/dir"
     mock_output = [
-        '* 2to3',
-        '  master',
+        "* 2to3",
+        "  master",
     ]
     # Setup mocked subprocess.Popen
     mock_popen.return_value.communicate.return_value = (
-        '\n'.join(mock_output).encode('utf-8'), ''.encode('utf-8'),
+        "\n".join(mock_output).encode("utf-8"),
+        "".encode("utf-8"),
     )
     mock_popen.return_value.returncode = 0
 
@@ -162,20 +163,21 @@ def test_git_branch(mock_popen):
     assert branch == expected_branch
 
 
-@patch('subprocess.Popen')
+@patch("subprocess.Popen")
 def test_git_clone(mock_popen):
     """Test git_clone()."""
-    expected_git_url = 'ssh://git@git.example.com:test.git'
-    expected_git_clone_dir = '/no/dir'
+    expected_git_url = "ssh://git@git.example.com:test.git"
+    expected_git_clone_dir = "/no/dir"
     expected_popen_args = [
-        'git',
-        'clone',
+        "git",
+        "clone",
         expected_git_url,
         expected_git_clone_dir,
     ]
     # Setup mocked subprocess.Popen
     mock_popen.return_value.communicate.return_value = (
-        ''.encode('utf-8'), ''.encode('utf-8'),
+        "".encode("utf-8"),
+        "".encode("utf-8"),
     )
     mock_popen.return_value.returncode = 0
 
@@ -189,25 +191,26 @@ def test_git_clone(mock_popen):
     mock_popen.return_value.communicate.assert_called_with()
 
 
-@patch('subprocess.Popen')
+@patch("subprocess.Popen")
 def test_git_pull(mock_popen):
     """Test git_pull()."""
-    expected_git_clone_dir = '/no/dir'
+    expected_git_clone_dir = "/no/dir"
     expected_popen_args = [
-        'git',
-        'pull',
+        "git",
+        "pull",
     ]
     mock_output = [
-        'remote: Enumerating objects: 7, done.',
-        'remote: Counting objects: 100% (7/7), done.',
-        'remote: Compressing objects: 100% (4/4), done.',
-        'remote: Total 4 (delta 3), reused 0 (delta 0), pack-reused 0',
-        'Unpacking objects: 100% (4/4), done.',
-        'Updating 85736f4..b183857',
+        "remote: Enumerating objects: 7, done.",
+        "remote: Counting objects: 100% (7/7), done.",
+        "remote: Compressing objects: 100% (4/4), done.",
+        "remote: Total 4 (delta 3), reused 0 (delta 0), pack-reused 0",
+        "Unpacking objects: 100% (4/4), done.",
+        "Updating 85736f4..b183857",
     ]
     # Setup mocked subprocess.Popen
     mock_popen.return_value.communicate.return_value = (
-        '\n'.join(mock_output).encode('utf-8'), ''.encode('utf-8'),
+        "\n".join(mock_output).encode("utf-8"),
+        "".encode("utf-8"),
     )
     mock_popen.return_value.returncode = 0
 
@@ -221,40 +224,41 @@ def test_git_pull(mock_popen):
     )
     mock_popen.return_value.communicate.assert_called_with()
 
-    assert retval == '85736f4..b183857'
+    assert retval == "85736f4..b183857"
 
 
-@patch('subprocess.Popen')
+@patch("subprocess.Popen")
 def test_git_show(mock_popen):
     """Test git_show()."""
-    expected_git_clone_dir = '/no/dir'
-    expected_git_ref = '85736f4..b183857'
+    expected_git_clone_dir = "/no/dir"
+    expected_git_ref = "85736f4..b183857"
     expected_popen_args = [
-        'git',
-        'show',
-        '--pretty=oneline',
-        '-s',
+        "git",
+        "show",
+        "--pretty=oneline",
+        "-s",
         expected_git_ref,
     ]
     expected_output = [
         [
-            '5d5b76da52ce3ab5be87f566e8ab117856e7275e',
+            "5d5b76da52ce3ab5be87f566e8ab117856e7275e",
             (
-                '(HEAD -> 2to3, origin/2to3) '
-                'Add end-to-end test for phpbb2slack.py'
+                "(HEAD -> 2to3, origin/2to3) "
+                "Add end-to-end test for phpbb2slack.py"
             ),
         ],
     ]
     mock_output = [
         (
-            '5d5b76da52ce3ab5be87f566e8ab117856e7275e '
-            '(HEAD -> 2to3, origin/2to3) '
-            'Add end-to-end test for phpbb2slack.py'
+            "5d5b76da52ce3ab5be87f566e8ab117856e7275e "
+            "(HEAD -> 2to3, origin/2to3) "
+            "Add end-to-end test for phpbb2slack.py"
         ),
     ]
     # Setup mocked subprocess.Popen
     mock_popen.return_value.communicate.return_value = (
-        '\n'.join(mock_output).encode('utf-8'), ''.encode('utf-8'),
+        "\n".join(mock_output).encode("utf-8"),
+        "".encode("utf-8"),
     )
     mock_popen.return_value.returncode = 0
 
@@ -273,90 +277,95 @@ def test_git_show(mock_popen):
     assert retval == expected_output
 
 
-@patch('git_commits2slack.git_branch')
-@patch('git_commits2slack.git_pull')
-@patch('git_commits2slack.git_show')
+@patch("git_commits2slack.git_branch")
+@patch("git_commits2slack.git_pull")
+@patch("git_commits2slack.git_show")
 def test_main_ideal(
-        mock_show, mock_pull, mock_branch,
-        monkeypatch, fixture_http_server, fixture_git_dir,
+    mock_show,
+    mock_pull,
+    mock_branch,
+    monkeypatch,
+    fixture_http_server,
+    fixture_git_dir,
 ):
     """End-to-end test - ideal environment."""
-    git_ref = '85736f4..b183857'
+    git_ref = "85736f4..b183857"
     repo_name = os.path.basename(fixture_git_dir)
-    expected_slack_channel = 'test'
-    mock_branch.return_value = 'master'
+    expected_slack_channel = "test"
+    mock_branch.return_value = "master"
     mock_pull.return_value = git_ref
     mock_show.return_value = [
         [
-            '5d5b76da52ce3ab5be87f566e8ab117856e7275e',
+            "5d5b76da52ce3ab5be87f566e8ab117856e7275e",
             (
-                '(HEAD -> 2to3, origin/2to3) '
-                'Add end-to-end test for phpbb2slack.py'
+                "(HEAD -> 2to3, origin/2to3) "
+                "Add end-to-end test for phpbb2slack.py"
             ),
         ],
     ]
     # Mock/set SLACK_TOKEN
-    monkeypatch.setenv('SLACK_TOKEN', 'test')
+    monkeypatch.setenv("SLACK_TOKEN", "test")
     # Mock Slack HTTP request
     fixture_http_server.serve_content(
-        '{"ok": "true", "error": ""}', 200,
-        {'Content-Type': 'application/json'},
+        '{"ok": "true", "error": ""}',
+        200,
+        {"Content-Type": "application/json"},
     )
     fixture_http_server.capture_requests = True
     expected_slack_requests = [
         {
-            'blocks': [
+            "blocks": [
                 {
-                    'type': 'section',
-                    'text': {
-                        'type': 'mrkdwn',
-                        'text': (
-                            '<http://example.com/tree/master|'
-                            + '[{}:master]> 1 commit'.format(repo_name)
-                        )
-                    }
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            "<http://example.com/tree/master|"
+                            + "[{}:master]> 1 commit".format(repo_name)
+                        ),
+                    },
                 },
                 {
-                    'type': 'section',
-                    'text': {
-                        'type': 'mrkdwn',
-                        'text': (
-                            '* (HEAD -> 2to3, origin/2to3) Add end-to-end '
-                            + 'test for phpbb2slack.py | '
-                            + '<http://example.com/commit/'
-                            + '5d5b76da52ce3ab5be87f566e8ab117856e7275e|'
-                            + '5d5b76>'
-                        )
-                    }
-                }
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            "* (HEAD -> 2to3, origin/2to3) Add end-to-end "
+                            + "test for phpbb2slack.py | "
+                            + "<http://example.com/commit/"
+                            + "5d5b76da52ce3ab5be87f566e8ab117856e7275e|"
+                            + "5d5b76>"
+                        ),
+                    },
+                },
             ],
-            'channel': expected_slack_channel
+            "channel": expected_slack_channel,
         }
     ]
     #
     exception = None
     args = [
-        './git_commits2slack.py',
-        '--git-clone-dir',
+        "./git_commits2slack.py",
+        "--git-clone-dir",
         fixture_git_dir,
-        '--git-repository',
-        'test',
-        '--git-web',
-        'http://example.com',
-        '--slack-base-url',
+        "--git-repository",
+        "test",
+        "--git-web",
+        "http://example.com",
+        "--slack-base-url",
         fixture_http_server.url,
-        '--slack-channel',
+        "--slack-channel",
         expected_slack_channel,
-        '--slack-timeout',
-        '10',
-        '-v',
+        "--slack-timeout",
+        "10",
+        "-v",
     ]
 
     saved_stdout = sys.stdout
     out = io.StringIO()
     sys.stdout = out
 
-    with patch.object(sys, 'argv', args):
+    with patch.object(sys, "argv", args):
         try:
             git_commits2slack.main()
         except SystemExit as sys_exit:
@@ -366,7 +375,7 @@ def test_main_ideal(
 
     assert isinstance(exception, SystemExit) is True
     assert exception.code == 0
-    assert out.getvalue().strip() == ''
+    assert out.getvalue().strip() == ""
     # Check mock calls
     mock_branch.assert_called_with(fixture_git_dir)
     mock_pull.assert_called_with(fixture_git_dir)
@@ -376,6 +385,6 @@ def test_main_ideal(
     assert len(fixture_http_server.requests) == 1
 
     req0 = fixture_http_server.captured_requests[0]
-    assert req0[0] == 'POST'
+    assert req0[0] == "POST"
     data = json.loads(req0[1])
     assert data == expected_slack_requests[0]

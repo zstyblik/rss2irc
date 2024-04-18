@@ -9,16 +9,19 @@ import os
 import sys
 import time
 import traceback
-from typing import Dict, List, Tuple
+from typing import Dict
+from typing import List
+from typing import Tuple
 
-import rss2irc
 from slack import WebClient
+
+import rss2irc  # noqa: I100, I202
 
 SLACK_BASE_URL = WebClient.BASE_URL
 
 
 def format_message(
-        url: str, msg_attrs: Tuple[str, str], handle: str = ''
+    url: str, msg_attrs: Tuple[str, str], handle: str = ""
 ) -> Dict:
     """Return formatted message as Slack's BlockKit section.
 
@@ -28,19 +31,19 @@ def format_message(
     """
     if handle:
         if len(msg_attrs) > 1 and msg_attrs[1]:
-            tag = '[{:s}-{:s}] '.format(handle, msg_attrs[1])
+            tag = "[{:s}-{:s}] ".format(handle, msg_attrs[1])
         else:
-            tag = '[{:s}] '.format(handle)
+            tag = "[{:s}] ".format(handle)
 
     else:
-        tag = ''
+        tag = ""
 
     return {
-        'type': 'section',
-        'text': {
-            'type': 'mrkdwn',
-            'text': '{}<{}|{}>'.format(tag, url, msg_attrs[0])
-        }
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": "{}<{}|{}>".format(tag, url, msg_attrs[0]),
+        },
     }
 
 
@@ -49,11 +52,11 @@ def get_slack_token() -> str:
 
     :raises: `ValueError`
     """
-    slack_token = os.environ.get('SLACK_TOKEN', None)
+    slack_token = os.environ.get("SLACK_TOKEN", None)
     if slack_token:
         return slack_token
 
-    raise ValueError('SLACK_TOKEN must be set.')
+    raise ValueError("SLACK_TOKEN must be set.")
 
 
 def get_slack_web_client(token: str, base_url: str, timeout: int) -> WebClient:
@@ -64,7 +67,7 @@ def get_slack_web_client(token: str, base_url: str, timeout: int) -> WebClient:
 def main():
     """Fetch RSS feed and post RSS news to Slack."""
     logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
-    logger = logging.getLogger('rss2slack')
+    logger = logging.getLogger("rss2slack")
     args = parse_args()
     if args.verbosity:
         logger.setLevel(logging.DEBUG)
@@ -77,12 +80,12 @@ def main():
         slack_token = get_slack_token()
         data = rss2irc.get_rss(logger, args.rss_url, args.rss_http_timeout)
         if not data:
-            logger.error('Failed to get RSS from %s', args.rss_url)
+            logger.error("Failed to get RSS from %s", args.rss_url)
             sys.exit(1)
 
         news = rss2irc.parse_news(data)
         if not news:
-            logger.info('No news?')
+            logger.info("No news?")
             sys.exit(0)
 
         cache = rss2irc.read_cache(logger, args.cache)
@@ -90,22 +93,24 @@ def main():
 
         for key in list(news.keys()):
             if key in cache.items:
-                logger.debug('Key %s found in cache', key)
+                logger.debug("Key %s found in cache", key)
                 cache.items[key] = int(time.time()) + args.cache_expiration
                 news.pop(key)
 
         slack_client = get_slack_web_client(
-            slack_token, base_url=args.slack_base_url,
-            timeout=args.slack_timeout
+            slack_token,
+            base_url=args.slack_base_url,
+            timeout=args.slack_timeout,
         )
         if not args.cache_init:
             for url in list(news.keys()):
-                msg_blocks = [
-                    format_message(url, news[url], args.handle)
-                ]
+                msg_blocks = [format_message(url, news[url], args.handle)]
                 try:
                     post_to_slack(
-                        logger, msg_blocks, slack_client, args.slack_channel,
+                        logger,
+                        msg_blocks,
+                        slack_client,
+                        args.slack_channel,
                     )
                 except ValueError:
                     news.pop(url)
@@ -131,84 +136,109 @@ def parse_args() -> argparse.Namespace:
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--cache',
-        dest='cache', type=str, default=None,
-        help='File which contains cache.'
+        "--cache",
+        dest="cache",
+        type=str,
+        default=None,
+        help="File which contains cache.",
     )
     parser.add_argument(
-        '--cache-expiration',
-        dest='cache_expiration', type=int,
+        "--cache-expiration",
+        dest="cache_expiration",
+        type=int,
         default=rss2irc.EXPIRATION,
-        help='Time, in seconds, for how long to keep items in cache.'
+        help="Time, in seconds, for how long to keep items in cache.",
     )
     parser.add_argument(
-        '--cache-init',
-        dest='cache_init', action='store_true', default=False,
-        help='Prevents posting news to IRC. This is useful '
-             'when bootstrapping new RSS feed.'
+        "--cache-init",
+        dest="cache_init",
+        action="store_true",
+        default=False,
+        help=(
+            "Prevents posting news to IRC. This is useful "
+            "when bootstrapping new RSS feed."
+        ),
     )
     parser.add_argument(
-        '--handle',
-        dest='handle', type=str, default=None,
-        help='Handle/callsign of this feed.'
+        "--handle",
+        dest="handle",
+        type=str,
+        default=None,
+        help="Handle/callsign of this feed.",
     )
     parser.add_argument(
-        '--rss-url',
-        dest='rss_url', type=str, required=True,
-        help='URL of RSS Feed.'
+        "--rss-url",
+        dest="rss_url",
+        type=str,
+        required=True,
+        help="URL of RSS Feed.",
     )
     parser.add_argument(
-        '--rss-http-timeout',
-        dest='rss_http_timeout', type=int,
+        "--rss-http-timeout",
+        dest="rss_http_timeout",
+        type=int,
         default=rss2irc.HTTP_TIMEOUT,
-        help='HTTP Timeout. Defaults to {:d} seconds.'.format(
+        help="HTTP Timeout. Defaults to {:d} seconds.".format(
             rss2irc.HTTP_TIMEOUT
-        )
+        ),
     )
     parser.add_argument(
-        '--slack-base-url',
-        dest='slack_base_url', type=str,
+        "--slack-base-url",
+        dest="slack_base_url",
+        type=str,
         default=SLACK_BASE_URL,
-        help='Base URL for Slack client.'
+        help="Base URL for Slack client.",
     )
     parser.add_argument(
-        '--slack-channel',
-        dest='slack_channel', type=str, required=True,
-        help='Name of Slack channel to send formatted news to.'
+        "--slack-channel",
+        dest="slack_channel",
+        type=str,
+        required=True,
+        help="Name of Slack channel to send formatted news to.",
     )
     parser.add_argument(
-        '--slack-timeout',
-        dest='slack_timeout', type=int,
+        "--slack-timeout",
+        dest="slack_timeout",
+        type=int,
         default=rss2irc.HTTP_TIMEOUT,
-        help='Slack API Timeout. Defaults to {:d} seconds.'.format(
+        help="Slack API Timeout. Defaults to {:d} seconds.".format(
             rss2irc.HTTP_TIMEOUT
-        )
+        ),
     )
     parser.add_argument(
-        '--sleep',
-        dest='sleep', type=int, default=2,
-        help='Sleep between messages in order to avoid '
-             'possible excess flood/API call rate limit.'
+        "--sleep",
+        dest="sleep",
+        type=int,
+        default=2,
+        help=(
+            "Sleep between messages in order to avoid "
+            "possible excess flood/API call rate limit."
+        ),
     )
     parser.add_argument(
-        '-v', '--verbose',
-        dest='verbosity', action='store_true', default=False,
-        help='Increase logging verbosity.'
+        "-v",
+        "--verbose",
+        dest="verbosity",
+        action="store_true",
+        default=False,
+        help="Increase logging verbosity.",
     )
     return parser.parse_args()
 
 
 def post_to_slack(
-        logger: logging.Logger, msg_blocks: List,
-        slack_client: WebClient, slack_channel: str,
+    logger: logging.Logger,
+    msg_blocks: List,
+    slack_client: WebClient,
+    slack_channel: str,
 ) -> None:
     """Post news to Slack channel."""
     try:
-        logger.debug('Will post %s', repr(msg_blocks))
+        logger.debug("Will post %s", repr(msg_blocks))
         rsp = slack_client.chat_postMessage(
             channel=slack_channel, blocks=msg_blocks
         )
-        logger.debug('Response from Slack: %s', rsp)
+        logger.debug("Response from Slack: %s", rsp)
         if not rsp or rsp["ok"] is False:
             raise ValueError("Slack response is not OK.")
     except ValueError:
@@ -216,5 +246,5 @@ def post_to_slack(
         raise
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

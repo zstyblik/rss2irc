@@ -8,10 +8,12 @@ import logging
 import sys
 import time
 import traceback
-from typing import Dict, List
+from typing import Dict
+from typing import List
 
 import feedparser
-import rss2irc
+
+import rss2irc  # noqa: I202
 import rss2slack
 
 CACHE_EXPIRATION = 86400  # seconds
@@ -19,29 +21,29 @@ HTTP_TIMEOUT = 30  # seconds
 
 
 def format_message(
-        url: str, msg_attrs: Dict[str, str], handle: str = ''
+    url: str, msg_attrs: Dict[str, str], handle: str = ""
 ) -> Dict:
     """Return formatted message as Slack's BlockKit section.
 
     :raises: `KeyError`
     """
     if handle:
-        if 'category' in msg_attrs and msg_attrs['category']:
-            tag = '[{:s}-{:s}] '.format(handle, msg_attrs['category'])
+        if "category" in msg_attrs and msg_attrs["category"]:
+            tag = "[{:s}-{:s}] ".format(handle, msg_attrs["category"])
         else:
-            tag = '[{:s}] '.format(handle)
+            tag = "[{:s}] ".format(handle)
 
     else:
-        tag = ''
+        tag = ""
 
     return {
-        'type': 'section',
-        'text': {
-            'type': 'mrkdwn',
-            'text': '{:s}<{:s}|{:s}> ({:d})'.format(
-                tag, url, msg_attrs['title'], msg_attrs['comments_cnt']
-            )
-        }
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": "{:s}<{:s}|{:s}> ({:d})".format(
+                tag, url, msg_attrs["title"], msg_attrs["comments_cnt"]
+            ),
+        },
     }
 
 
@@ -51,11 +53,11 @@ def get_authors_from_file(logger: logging.Logger, fname: str) -> List[str]:
         return []
 
     try:
-        with open(fname, 'rb') as fhandle:
+        with open(fname, "rb") as fhandle:
             authors = [
-                line.decode('utf-8').strip()
+                line.decode("utf-8").strip()
                 for line in fhandle.readlines()
-                if line.decode('utf-8').strip() != ''
+                if line.decode("utf-8").strip() != ""
             ]
     except Exception:
         logger.error(traceback.format_exc())
@@ -67,7 +69,7 @@ def get_authors_from_file(logger: logging.Logger, fname: str) -> List[str]:
 def main():
     """Fetch phpBB RSS feed and post RSS news to Slack."""
     logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
-    logger = logging.getLogger('phpbb2slack')
+    logger = logging.getLogger("phpbb2slack")
     args = parse_args()
     if args.verbosity:
         logger.setLevel(logging.DEBUG)
@@ -82,12 +84,12 @@ def main():
 
         data = rss2irc.get_rss(logger, args.rss_url, args.rss_http_timeout)
         if not data:
-            logger.error('Failed to get RSS from %s', args.rss_url)
+            logger.error("Failed to get RSS from %s", args.rss_url)
             sys.exit(1)
 
         news = parse_news(data, authors)
         if not news:
-            logger.info('No news?')
+            logger.info("No news?")
             sys.exit(0)
 
         cache = rss2irc.read_cache(logger, args.cache)
@@ -97,11 +99,11 @@ def main():
             if key not in cache.items:
                 continue
 
-            logger.debug('Key %s found in cache', key)
-            comments_cached = int(cache.items[key]['comments_cnt'])
-            comments_actual = int(news[key]['comments_cnt'])
+            logger.debug("Key %s found in cache", key)
+            comments_cached = int(cache.items[key]["comments_cnt"])
+            comments_actual = int(news[key]["comments_cnt"])
             if comments_cached == comments_actual:
-                cache.items[key]['expiration'] = (
+                cache.items[key]["expiration"] = (
                     int(time.time()) + args.cache_expiration
                 )
                 news.pop(key)
@@ -111,12 +113,13 @@ def main():
         )
         if not args.cache_init:
             for url in list(news.keys()):
-                msg_blocks = [
-                    format_message(url, news[url], args.handle)
-                ]
+                msg_blocks = [format_message(url, news[url], args.handle)]
                 try:
                     rss2slack.post_to_slack(
-                        logger, msg_blocks, slack_client, args.slack_channel,
+                        logger,
+                        msg_blocks,
+                        slack_client,
+                        args.slack_channel,
                     )
                 except ValueError:
                     news.pop(url)
@@ -139,74 +142,101 @@ def parse_args() -> argparse.Namespace:
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--authors-of-interest',
-        dest='authors_file', type=str, default=None,
-        help='Path to file which contains list of authors, one per line. '
-             'Only threads which are started by one of the authors on the '
-             'list will be pushed.'
+        "--authors-of-interest",
+        dest="authors_file",
+        type=str,
+        default=None,
+        help=(
+            "Path to file which contains list of authors, one per line. "
+            "Only threads which are started by one of the authors on the "
+            "list will be pushed."
+        ),
     )
     parser.add_argument(
-        '--cache',
-        dest='cache', type=str, default=None,
-        help='Path to cache file.'
+        "--cache",
+        dest="cache",
+        type=str,
+        default=None,
+        help="Path to cache file.",
     )
     parser.add_argument(
-        '--cache-expiration',
-        dest='cache_expiration', type=int,
+        "--cache-expiration",
+        dest="cache_expiration",
+        type=int,
         default=CACHE_EXPIRATION,
-        help='Time, in seconds, for how long to keep items in cache.'
+        help="Time, in seconds, for how long to keep items in cache.",
     )
     parser.add_argument(
-        '--cache-init',
-        dest='cache_init', action='store_true', default=False,
-        help='Prevents posting news to IRC. This is useful '
-             'when bootstrapping new RSS feed.'
+        "--cache-init",
+        dest="cache_init",
+        action="store_true",
+        default=False,
+        help=(
+            "Prevents posting news to IRC. This is useful "
+            "when bootstrapping new RSS feed."
+        ),
     )
     parser.add_argument(
-        '--handle',
-        dest='handle', type=str, default=None,
-        help='Handle/callsign of this feed.'
+        "--handle",
+        dest="handle",
+        type=str,
+        default=None,
+        help="Handle/callsign of this feed.",
     )
     parser.add_argument(
-        '--rss-url',
-        dest='rss_url', type=str, required=True,
-        help='URL of RSS Feed.'
+        "--rss-url",
+        dest="rss_url",
+        type=str,
+        required=True,
+        help="URL of RSS Feed.",
     )
     parser.add_argument(
-        '--rss-http-timeout',
-        dest='rss_http_timeout', type=int,
+        "--rss-http-timeout",
+        dest="rss_http_timeout",
+        type=int,
         default=HTTP_TIMEOUT,
-        help='HTTP Timeout. Defaults to {:d} seconds.'.format(HTTP_TIMEOUT)
+        help="HTTP Timeout. Defaults to {:d} seconds.".format(HTTP_TIMEOUT),
     )
     parser.add_argument(
-        '--slack-base-url',
-        dest='slack_base_url', type=str,
+        "--slack-base-url",
+        dest="slack_base_url",
+        type=str,
         default=rss2slack.SLACK_BASE_URL,
-        help='Base URL for Slack client.'
+        help="Base URL for Slack client.",
     )
     parser.add_argument(
-        '--slack-channel',
-        dest='slack_channel', type=str, required=True,
-        help='Name of Slack channel to send formatted news to.'
+        "--slack-channel",
+        dest="slack_channel",
+        type=str,
+        required=True,
+        help="Name of Slack channel to send formatted news to.",
     )
     parser.add_argument(
-        '--slack-timeout',
-        dest='slack_timeout', type=int,
+        "--slack-timeout",
+        dest="slack_timeout",
+        type=int,
         default=HTTP_TIMEOUT,
-        help='Slack API Timeout. Defaults to {:d} seconds.'.format(
+        help="Slack API Timeout. Defaults to {:d} seconds.".format(
             HTTP_TIMEOUT
-        )
+        ),
     )
     parser.add_argument(
-        '--sleep',
-        dest='sleep', type=int, default=2,
-        help='Sleep between messages in order to avoid '
-             'possible excess flood/API call rate limit.'
+        "--sleep",
+        dest="sleep",
+        type=int,
+        default=2,
+        help=(
+            "Sleep between messages in order to avoid "
+            "possible excess flood/API call rate limit."
+        ),
     )
     parser.add_argument(
-        '-v', '--verbose',
-        dest='verbosity', action='store_true', default=False,
-        help='Increase logging verbosity.'
+        "-v",
+        "--verbose",
+        dest="verbosity",
+        action="store_true",
+        default=False,
+        help="Increase logging verbosity.",
     )
     return parser.parse_args()
 
@@ -215,30 +245,27 @@ def parse_news(data: str, authors: List[str]) -> Dict:
     """Parse-out link and title out of XML."""
     news = {}
     feed = feedparser.parse(data)
-    for entry in feed['entries']:
-        link = entry.pop('link', None)
-        title = entry.pop('title', None)
-        author_detail = entry.pop('author_detail', {'name': None})
-        if (
-                not 'link'
-                and not 'title'
-        ):
+    for entry in feed["entries"]:
+        link = entry.pop("link", None)
+        title = entry.pop("title", None)
+        author_detail = entry.pop("author_detail", {"name": None})
+        if not "link" and not "title":
             continue
 
-        if authors and author_detail['name'] not in authors:
+        if authors and author_detail["name"] not in authors:
             continue
 
-        category = entry.pop('category', None)
-        comments_cnt = entry.pop('slash_comments', 0)
+        category = entry.pop("category", None)
+        comments_cnt = entry.pop("slash_comments", 0)
         try:
             comments_cnt = int(comments_cnt)
         except ValueError:
             comments_cnt = 0
 
         news[link] = {
-            'title': title,
-            'category': category,
-            'comments_cnt': int(comments_cnt),
+            "title": title,
+            "category": category,
+            "comments_cnt": int(comments_cnt),
         }
 
     return news
@@ -249,7 +276,7 @@ def scrub_cache(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
     time_now = int(time.time())
     for key in list(cache.items.keys()):
         try:
-            expiration = int(cache.items[key]['expiration'])
+            expiration = int(cache.items[key]["expiration"])
         except (KeyError, ValueError):
             logger.error(traceback.format_exc())
             logger.error(
@@ -259,20 +286,20 @@ def scrub_cache(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
             continue
 
         if expiration < time_now:
-            logger.debug('URL %s has expired.', key)
+            logger.debug("URL %s has expired.", key)
             cache.items.pop(key)
 
 
 def update_cache(
-        cache: rss2irc.CachedData, news: Dict, expiration: int
+    cache: rss2irc.CachedData, news: Dict, expiration: int
 ) -> None:
     """Update cache contents."""
     for key in list(news.keys()):
         cache.items[key] = {
-            'expiration': expiration,
-            'comments_cnt': int(news[key]['comments_cnt']),
+            "expiration": expiration,
+            "comments_cnt": int(news[key]["comments_cnt"]),
         }
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
