@@ -9,6 +9,7 @@ import re
 import sys
 import time
 import traceback
+import urllib.parse
 from typing import Dict
 from typing import List
 from typing import Set
@@ -24,7 +25,7 @@ ALIASES = {
 }
 DEFAULT_HTTP_PROTO = "https"
 DEFAULT_GH_URL = "github.com"
-RE_LINK_REL_NEXT = re.compile(r'<(?P<next>.*)>; rel="next"')
+RE_LINK_REL_NEXT = re.compile(r"<(?P<next>.*)>; rel=\"next")
 
 
 def format_message(
@@ -84,6 +85,18 @@ def get_gh_repository_url(owner: str, repo: str) -> str:
     )
 
 
+def gh_parse_next_page(link_header: str) -> str:
+    """Parse link to the next page from GitHub's Link header."""
+    next_page = ""
+    for chunk in str(link_header).split('",'):
+        match = RE_LINK_REL_NEXT.search(chunk)
+        if match:
+            next_page = match.groupdict()["next"]
+            break
+
+    return next_page
+
+
 def gh_request(
     logger: logging.Logger, url: str, timeout: int = rss2irc.HTTP_TIMEOUT
 ) -> List:
@@ -105,11 +118,22 @@ def gh_request(
     # In order to get everything, we must follow URLs in the 'Link' header as
     # long as there is next one to follow.
     link_header = rsp.headers.get("link", "")
-    match = RE_LINK_REL_NEXT.search(link_header)
-    if not match:
+    next_page = gh_parse_next_page(str(link_header))
+    if not next_page:
         return [rsp.json()]
 
-    return [rsp.json()] + gh_request(logger, match.groupdict()["next"], timeout)
+    # NOTE: 'state' and 'sort' will be added again, therefore let's get rid off
+    # them. If we didn't do this, number of params would grow with each
+    # recursion.
+    parsed = urllib.parse.urlparse(next_page)
+    qdict = urllib.parse.parse_qs(parsed.query)
+    qdict.pop("state", None)
+    qdict.pop("sort", None)
+    new_query = urllib.parse.urlencode(qdict, doseq=True)
+    parsed = parsed._replace(query=new_query)
+    # FIXME(zstyblik): unlimited recursion. This will require some refactoring.
+    # However, since nobody is using this, later.
+    return [rsp.json()] + gh_request(logger, parsed.geturl(), timeout)
 
 
 def main():
