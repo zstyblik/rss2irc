@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import time
+import urllib.parse
 from unittest.mock import call
 from unittest.mock import patch
 
@@ -31,7 +32,7 @@ class MockedResponse:
         self._raise_for_status_called = False
 
     def raise_for_status(self):
-        """Note raise_for_status has been called."""
+        """Record that raise_for_status has been called."""
         self._raise_for_status_called = True
 
     def json(self):
@@ -129,6 +130,72 @@ def test_gh_request_follows_link_header(mock_get):
     assert mock_get.mock_calls == expected_mock_calls
     assert mocked_response1._raise_for_status_called is True
     assert mocked_response2._raise_for_status_called is True
+
+
+def test_gh_request_follows_link_header_multi_page(fixture_mock_requests):
+    """Test gh_request() follows up on 'Link' header multiple times."""
+    url1 = "https://example.com/repos/foo/bar"
+    headers1 = {
+        "link": (
+            "<https://example.com/user/6183869/repos"
+            '?page=2&state=open&sort=created>; rel="next", '
+            "<https://example.com/user/6183869/repos"
+            '?page=3&state=open&sort=created>; rel="last"'
+        )
+    }
+    mock_http1 = fixture_mock_requests.get(url1, json="foo", headers=headers1)
+
+    url2 = (
+        "https://example.com/user/6183869/repos"
+        "?page=2&state=open&sort=created"
+    )
+    headers2 = {
+        "link": (
+            "<https://example.com/user/6183869/repos"
+            '?page=1&state=open&sort=created>; rel="prev", '
+            "<https://example.com/user/6183869/repos"
+            '?page=3&state=open&sort=created>; rel="next", '
+            "<https://example.com/user/6183869/repos"
+            '?page=3&state=open&sort=created>; rel="last", '
+            "<https://example.com/user/6183869/repos"
+            '?page=1&state=open&sort=created>; rel="first"'
+        )
+    }
+    mock_http2 = fixture_mock_requests.get(url2, json="bar", headers=headers2)
+
+    url3 = (
+        "https://example.com/user/6183869/repos"
+        "?page=3&state=open&sort=created"
+    )
+    headers3 = {
+        "link": (
+            "<https://example.com/user/6183869/repos"
+            '?page=1&state=open&sort=created>; rel="prev", '
+            "<https://example.com/user/6183869/repos"
+            '?page=3&state=open&sort=created>; rel="last", '
+            "<https://example.com/user/6183869/repos"
+            '?page=1&state=open&sort=created>; rel="first"'
+        )
+    }
+    mock_http3 = fixture_mock_requests.get(url3, json="lar", headers=headers3)
+
+    logger = logging.getLogger("test")
+    response = gh2slack.gh_request(logger, url1)
+
+    assert response == ["foo", "bar", "lar"]
+    # Check that requests have been made.
+    assert mock_http1.called is True
+    assert mock_http1.call_count == 1
+    assert mock_http2.called is True
+    assert mock_http2.call_count == 1
+    assert mock_http3.called is True
+    assert mock_http3.call_count == 1
+    # Check that 'state' and 'sort' params are present and passed only once.
+    assert "state=open&sort=created" == mock_http1.request_history[0].query
+    parsed2 = urllib.parse.urlparse(url2)
+    assert parsed2.query == mock_http2.request_history[0].query
+    parsed3 = urllib.parse.urlparse(url3)
+    assert parsed3.query == mock_http3.request_history[0].query
 
 
 def test_main_ideal(
