@@ -1,7 +1,7 @@
 -r requirements.txt
 
 # lint
-black==24.3.0
+black==24.4.2
 flake8
 flake8-docstrings
 flake8-import-order
