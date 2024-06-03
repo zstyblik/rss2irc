@@ -8,5 +8,5 @@ flake8-import-order
 reorder-python-imports
 # tests
 pytest
-pytest-localserver
-requests_mock
+pytest-localserver==0.8.1
+requests-mock==1.12.1
