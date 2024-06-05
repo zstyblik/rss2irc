@@ -40,7 +40,10 @@ def format_message(
     try:
         title = cache_item["title"].encode("utf-8")
     except UnicodeEncodeError:
-        logger.error("Failed to encode title as UTF-8: %s", repr(title))
+        logger.error(
+            "Failed to encode title as UTF-8: %s",
+            repr(cache_item.get("title", None)),
+        )
         logger.error(traceback.format_exc())
         title = "Unknown title due to UTF-8 exception, {:s}#{:d}".format(
             section, cache_item["number"]
@@ -157,7 +160,7 @@ def main():
             sys.exit(0)
 
         cache = rss2irc.read_cache(logger, args.cache)
-        scrub_cache(logger, cache)
+        scrub_items(logger, cache)
 
         # Note: I have failed to find web link to repo in GH response.
         # Therefore, let's create one.
@@ -220,7 +223,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-expiration",
         dest="cache_expiration",
         type=int,
-        default=rss2irc.EXPIRATION,
+        default=rss2irc.CACHE_EXPIRATION,
         help="Time, in seconds, for how long to keep items " "in cache.",
     )
     parser.add_argument(
@@ -344,7 +347,7 @@ def process_page_items(
     return to_publish
 
 
-def scrub_cache(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
+def scrub_items(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = int(time.time())
     for key in list(cache.items.keys()):

@@ -388,8 +388,8 @@ def test_process_page_items():
     assert to_publish == expected_to_publish
 
 
-def test_scrub_cache():
-    """Test scrub_cache()."""
+def test_scrub_items():
+    """Test scrub_items()."""
     item_expiration = int(time.time()) + 60
     test_cache = rss2irc.CachedData(
         items={
@@ -411,6 +411,6 @@ def test_scrub_cache():
     }
 
     logger = logging.getLogger("test")
-    gh2slack.scrub_cache(logger, test_cache)
+    gh2slack.scrub_items(logger, test_cache)
 
     assert test_cache.items == expected

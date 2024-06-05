@@ -81,32 +81,32 @@ def main():
     try:
         slack_token = rss2slack.get_slack_token()
         authors = get_authors_from_file(logger, args.authors_file)
+        cache = rss2irc.read_cache(logger, args.cache)
+        source = cache.get_source_by_url(args.rss_url)
 
-        data = rss2irc.get_rss(logger, args.rss_url, args.rss_http_timeout)
-        if not data:
+        rsp = rss2irc.get_rss(
+            logger,
+            args.rss_url,
+            args.rss_http_timeout,
+            source.make_caching_headers(),
+        )
+        if rsp.status_code == 304:
+            logger.debug("No new RSS data since the last run")
+            rss2irc.write_cache(cache, args.cache)
+            sys.exit(0)
+
+        if not rsp.text:
             logger.error("Failed to get RSS from %s", args.rss_url)
             sys.exit(1)
 
-        news = parse_news(data, authors)
+        news = parse_news(rsp.text, authors)
         if not news:
             logger.info("No news?")
             sys.exit(0)
 
-        cache = rss2irc.read_cache(logger, args.cache)
-        scrub_cache(logger, cache)
-
-        for key in list(news.keys()):
-            if key not in cache.items:
-                continue
-
-            logger.debug("Key %s found in cache", key)
-            comments_cached = int(cache.items[key]["comments_cnt"])
-            comments_actual = int(news[key]["comments_cnt"])
-            if comments_cached == comments_actual:
-                cache.items[key]["expiration"] = (
-                    int(time.time()) + args.cache_expiration
-                )
-                news.pop(key)
+        source.extract_caching_headers(rsp.headers)
+        scrub_items(logger, cache)
+        prune_news(logger, cache, news, args.cache_expiration)
 
         slack_client = rss2slack.get_slack_web_client(
             slack_token, args.slack_base_url, args.slack_timeout
@@ -126,8 +126,8 @@ def main():
                 finally:
                     time.sleep(args.sleep)
 
-        expiration = int(time.time()) + args.cache_expiration
-        update_cache(cache, news, expiration)
+        update_items_expiration(cache, news, args.cache_expiration)
+        cache.scrub_data_sources()
         rss2irc.write_cache(cache, args.cache)
     except Exception:
         logger.debug(traceback.format_exc())
@@ -271,7 +271,27 @@ def parse_news(data: str, authors: List[str]) -> Dict:
     return news
 
 
-def scrub_cache(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
+def prune_news(
+    logger: logging.Logger,
+    cache: rss2irc.CachedData,
+    news: Dict[str, Dict],
+    expiration: int = CACHE_EXPIRATION,
+) -> None:
+    """Prune news which already are in cache."""
+    item_expiration = int(time.time()) + expiration
+    for key in list(news.keys()):
+        if key not in cache.items:
+            continue
+
+        logger.debug("Key %s found in cache", key)
+        comments_cached = int(cache.items[key]["comments_cnt"])
+        comments_actual = int(news[key]["comments_cnt"])
+        if comments_cached == comments_actual:
+            cache.items[key]["expiration"] = item_expiration
+            news.pop(key)
+
+
+def scrub_items(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = int(time.time())
     for key in list(cache.items.keys()):
@@ -290,13 +310,14 @@ def scrub_cache(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
             cache.items.pop(key)
 
 
-def update_cache(
+def update_items_expiration(
     cache: rss2irc.CachedData, news: Dict, expiration: int
 ) -> None:
     """Update cache contents."""
+    item_expiration = int(time.time()) + expiration
     for key in list(news.keys()):
         cache.items[key] = {
-            "expiration": expiration,
+            "expiration": item_expiration,
             "comments_cnt": int(news[key]["comments_cnt"]),
         }
 
