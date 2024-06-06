@@ -337,6 +337,27 @@ def test_main_cache_hit(
     assert sorted(output) == sorted(expected_output)
 
 
+def test_parse_news():
+    """Test parse_news()."""
+    expected_news = {
+        "http://www.example.com/scan.php?page=news_item&px=item1": (
+            "Item1",
+            "",
+        ),
+        "http://www.example.com/scan.php?page=news_item&px=item2": (
+            "Item2",
+            "",
+        ),
+    }
+
+    rss_fname = os.path.join(SCRIPT_PATH, "files", "rss.xml")
+    with open(rss_fname, "rb") as fhandle:
+        rss_data = fhandle.read().decode("utf-8")
+
+    result = rss2irc.parse_news(rss_data)
+    assert result == expected_news
+
+
 def test_scrub_items():
     """Test scrub_items()."""
     logging.basicConfig(level=logging.CRITICAL)

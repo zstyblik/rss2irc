@@ -272,10 +272,11 @@ def parse_news(data: str) -> Dict[str, Tuple[str, str]]:
     feed = feedparser.parse(data)
     for entry in feed["entries"]:
         link = entry.pop("link", "")
-        title = entry.pop("title", "")
-        if not "link" and not "title":
+        if not link:
+            # If we don't have a link, there is nothing we can do.
             continue
 
+        title = entry.pop("title", "No title")
         category = entry.pop("category", "")
         news[link] = (title, category)
 

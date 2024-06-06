@@ -247,14 +247,15 @@ def parse_news(data: str, authors: List[str]) -> Dict:
     feed = feedparser.parse(data)
     for entry in feed["entries"]:
         link = entry.pop("link", None)
-        title = entry.pop("title", None)
-        author_detail = entry.pop("author_detail", {"name": None})
-        if not "link" and not "title":
+        if not link:
+            # If we don't have a link, there is nothing we can do.
             continue
 
+        author_detail = entry.pop("author_detail", {"name": None})
         if authors and author_detail["name"] not in authors:
             continue
 
+        title = entry.pop("title", "No title")
         category = entry.pop("category", None)
         comments_cnt = entry.pop("slash_comments", 0)
         try:

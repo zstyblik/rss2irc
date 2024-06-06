@@ -331,6 +331,29 @@ def test_main_cache_hit(
     assert len(fixture_http_server.requests) == 0
 
 
+def test_parse_news():
+    """Test parse_news()."""
+    expected_news = {
+        "https://phpbb.example.com/threads/something-of-something.424837/": {
+            "title": "Some other problem",
+            "category": None,
+            "comments_cnt": 0,
+        },
+        "https://phpbb.example.com/threads/something-not-received.424836/": {
+            "title": "Something not received",
+            "category": None,
+            "comments_cnt": 1,
+        },
+    }
+
+    rss_fname = os.path.join(SCRIPT_PATH, "files", "phpbb-rss.xml")
+    with open(rss_fname, "rb") as fhandle:
+        rss_data = fhandle.read().decode("utf-8")
+
+    result = phpbb2slack.parse_news(rss_data, [])
+    assert result == expected_news
+
+
 @pytest.mark.parametrize(
     "cache,expected_cache",
     [
