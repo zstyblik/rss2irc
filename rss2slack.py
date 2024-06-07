@@ -130,7 +130,7 @@ def main():
         rss2irc.write_cache(cache, args.cache)
         # TODO(zstyblik): remove error file
     except Exception:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         # TODO(zstyblik):
         # 1. touch error file
         # 2. send error message to the channel
@@ -248,7 +248,7 @@ def post_to_slack(
         if not rsp or rsp["ok"] is False:
             raise ValueError("Slack response is not OK.")
     except ValueError:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         raise
 
 

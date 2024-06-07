@@ -44,7 +44,7 @@ def format_message(
             "Failed to encode title as UTF-8: %s",
             repr(cache_item.get("title", None)),
         )
-        logger.error(traceback.format_exc())
+        logger.error("%s", traceback.format_exc())
         title = "Unknown title due to UTF-8 exception, {:s}#{:d}".format(
             section, cache_item["number"]
         )
@@ -194,14 +194,14 @@ def main():
                         args.slack_channel,
                     )
                 except Exception:
-                    logger.error(traceback.format_exc())
+                    logger.error("%s", traceback.format_exc())
                     cache.items.pop(html_url)
                 finally:
                     time.sleep(args.sleep)
 
         rss2irc.write_cache(cache, args.cache)
     except Exception:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         # TODO(zstyblik):
         # 1. touch error file
         # 2. send error message to the channel
@@ -354,7 +354,7 @@ def scrub_items(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
         try:
             expiration = int(cache.items[key]["expiration"])
         except (KeyError, ValueError):
-            logger.error(traceback.format_exc())
+            logger.error("%s", traceback.format_exc())
             logger.error(
                 "Invalid cache entry will be removed: '%s'", cache.items[key]
             )

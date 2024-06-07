@@ -185,7 +185,7 @@ def main():
         write_cache(cache, args.cache)
         # TODO(zstyblik): remove error file
     except Exception:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         # TODO(zstyblik):
         # 1. touch error file
         # 2. send error message to the channel
@@ -318,7 +318,7 @@ def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
             traceback.format_exc(),
         )
 
-    logger.debug(cache)
+    logger.debug("%s", cache)
     return cache
 
 
@@ -334,7 +334,7 @@ def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
         try:
             expiration = int(cache.items[key])
         except ValueError:
-            logger.error(traceback.format_exc())
+            logger.error("%s", traceback.format_exc())
             logger.error(
                 "Invalid cache entry will be removed: '%s'", cache.items[key]
             )
@@ -381,7 +381,7 @@ def write_data(
                 write_message(logger, fhandle, message)
                 time.sleep(sleep)
             except ValueError:
-                logger.debug(traceback.format_exc())
+                logger.debug("%s", traceback.format_exc())
                 logger.debug("Failed to write %s, %s", url, data[url])
                 data.pop(url)
 

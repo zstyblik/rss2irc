@@ -60,7 +60,7 @@ def get_authors_from_file(logger: logging.Logger, fname: str) -> List[str]:
                 if line.decode("utf-8").strip() != ""
             ]
     except Exception:
-        logger.error(traceback.format_exc())
+        logger.error("%s", traceback.format_exc())
         authors = []
 
     return authors
@@ -130,7 +130,7 @@ def main():
         cache.scrub_data_sources()
         rss2irc.write_cache(cache, args.cache)
     except Exception:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         # TODO(zstyblik):
         # 1. touch error file
         # 2. send error message to the channel
@@ -299,7 +299,7 @@ def scrub_items(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
         try:
             expiration = int(cache.items[key]["expiration"])
         except (KeyError, ValueError):
-            logger.error(traceback.format_exc())
+            logger.error("%s", traceback.format_exc())
             logger.error(
                 "Invalid cache entry will be removed: '%s'", cache.items[key]
             )
