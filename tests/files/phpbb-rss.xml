@@ -29,5 +29,13 @@ Does anyone else have the same situation?]]></content:encoded>
       <content:encoded><![CDATA[I ordered a new something yesterday and still have not received an email. i have emailed twice somewhere and still nothing....so now trying something.]]></content:encoded>
       <slash:comments>1</slash:comments>
     </item>
+    <item>
+      <title>Broken entry</title>
+      <pubDate>Fri, 14 Feb 2020 20:50:36 +0000</pubDate>
+      <author>invalid@example.com (otherUser)</author>
+      <dc:creator>otherUser</dc:creator>
+      <content:encoded><![CDATA[I ordered a new something yesterday and still have not received an email. i have emailed twice somewhere and still nothing....so now trying something.]]></content:encoded>
+      <slash:comments>1</slash:comments>
+    </item>
   </channel>
 </rss>

@@ -204,7 +204,7 @@ def main():
             args.slack_channel,
         )
     except Exception:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         # TODO(zstyblik):
         # 1. touch error file
         # 2. send error message to the channel

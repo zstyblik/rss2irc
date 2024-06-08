@@ -21,15 +21,74 @@ from typing import Tuple
 import feedparser
 import requests
 
-EXPIRATION = 86400  # seconds
+CACHE_EXPIRATION = 86400  # seconds
+DATA_SOURCE_EXPIRATION = 30 * 86400  # seconds
 HTTP_TIMEOUT = 30  # seconds
+
+
+@dataclass
+class HTTPSource:
+    """Class represents HTTP data source."""
+
+    http_etag: str = field(default_factory=str)
+    http_last_modified: str = field(default_factory=str)
+    last_used_ts: int = 0
+    url: str = field(default_factory=str)
+
+    def extract_caching_headers(self, headers: Dict[str, str]) -> None:
+        """Extract cache related headers from given dict."""
+        self.http_etag = ""
+        self.http_last_modified = ""
+        for key, value in headers.items():
+            key = key.lower()
+            if key == "etag":
+                self.http_etag = value
+            elif key == "last-modified":
+                self.http_last_modified = value
+
+    def make_caching_headers(self) -> Dict[str, str]:
+        """Return cache related headers as a dict."""
+        headers = {}
+        if self.http_etag:
+            headers["if-none-match"] = self.http_etag
+
+        if self.http_last_modified:
+            headers["if-modified-since"] = self.http_last_modified
+
+        return headers
 
 
 @dataclass
 class CachedData:
     """CachedData represents locally cached data and state."""
 
+    data_sources: dict = field(default_factory=dict)
     items: dict = field(default_factory=dict)
+
+    def get_source_by_url(self, url: str) -> HTTPSource:
+        """Return source by URL.
+
+        If source doesn't exist, it will be created.
+        """
+        source = self.data_sources.get(url, None)
+        if source:
+            source.last_used_ts = int(time.time())
+            return source
+
+        self.data_sources[url] = HTTPSource(
+            last_used_ts=int(time.time()), url=url
+        )
+        return self.get_source_by_url(url)
+
+    def scrub_data_sources(
+        self, expiration: int = DATA_SOURCE_EXPIRATION
+    ) -> None:
+        """Delete expired data sources."""
+        now = int(time.time())
+        for key in list(self.data_sources.keys()):
+            diff = now - self.data_sources[key].last_used_ts
+            if int(diff) > expiration:
+                self.data_sources.pop(key)
 
 
 def format_message(
@@ -53,18 +112,24 @@ def format_message(
 
 
 def get_rss(
-    logger: logging.Logger, url: str, timeout: int = HTTP_TIMEOUT
-) -> str:
+    logger: logging.Logger,
+    url: str,
+    timeout: int = HTTP_TIMEOUT,
+    extra_headers: Dict = None,
+) -> requests.models.Response:
     """Return body of given URL as a string."""
     # Randomize user agent, because CF likes to block for no apparent reason.
-    logger.debug("Get %s", url)
     user_agent = "rss2irc_{:d}".format(int(time.time()))
-    rsp = requests.get(url, timeout=timeout, headers={"User-Agent": user_agent})
+    headers = {"User-Agent": user_agent}
+    if extra_headers:
+        for key, value in extra_headers.items():
+            headers[key] = value
+
+    logger.debug("Get %s", url)
+    rsp = requests.get(url, timeout=timeout, headers=headers)
     logger.debug("Got HTTP Status Code: %i", rsp.status_code)
     rsp.raise_for_status()
-    data = rsp.text
-    del rsp
-    return data
+    return rsp
 
 
 def main():
@@ -84,36 +149,43 @@ def main():
         sys.exit(1)
 
     try:
-        data = get_rss(logger, args.rss_url, args.rss_http_timeout)
-        if not data:
+        cache = read_cache(logger, args.cache)
+        source = cache.get_source_by_url(args.rss_url)
+
+        rsp = get_rss(
+            logger,
+            args.rss_url,
+            args.rss_http_timeout,
+            source.make_caching_headers(),
+        )
+        if rsp.status_code == 304:
+            logger.debug("No new RSS data since the last run")
+            write_cache(cache, args.cache)
+            sys.exit(0)
+
+        if not rsp.text:
             logger.error("Failed to get RSS from %s", args.rss_url)
             sys.exit(1)
 
-        news = parse_news(data)
+        news = parse_news(rsp.text)
         if not news:
             logger.info("No news?")
+            write_cache(cache, args.cache)
             sys.exit(0)
 
-        cache = read_cache(logger, args.cache)
-        scrub_cache(logger, cache)
-
-        for key in list(news.keys()):
-            if key in cache.items:
-                logger.debug("Key %s found in cache", key)
-                cache.items[key] = int(time.time()) + args.cache_expiration
-                news.pop(key)
+        source.extract_caching_headers(rsp.headers)
+        scrub_items(logger, cache)
+        prune_news(logger, cache, news, args.cache_expiration)
 
         if not args.cache_init:
             write_data(logger, news, args.output, args.handle, args.sleep)
 
-        expiration = int(time.time()) + args.cache_expiration
-        for key in list(news.keys()):
-            cache.items[key] = expiration
-
+        update_items_expiration(cache, news, args.cache_expiration)
+        cache.scrub_data_sources()
         write_cache(cache, args.cache)
         # TODO(zstyblik): remove error file
     except Exception:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         # TODO(zstyblik):
         # 1. touch error file
         # 2. send error message to the channel
@@ -171,7 +243,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-expiration",
         dest="cache_expiration",
         type=int,
-        default=EXPIRATION,
+        default=CACHE_EXPIRATION,
         help="Time, in seconds, for how long to keep items in cache.",
     )
     parser.add_argument(
@@ -200,14 +272,30 @@ def parse_news(data: str) -> Dict[str, Tuple[str, str]]:
     feed = feedparser.parse(data)
     for entry in feed["entries"]:
         link = entry.pop("link", "")
-        title = entry.pop("title", "")
-        if not "link" and not "title":
+        if not link:
+            # If we don't have a link, there is nothing we can do.
             continue
 
+        title = entry.pop("title", "No title")
         category = entry.pop("category", "")
         news[link] = (title, category)
 
     return news
+
+
+def prune_news(
+    logger: logging.Logger,
+    cache: CachedData,
+    news: Dict[str, Tuple[str, str]],
+    expiration: int = CACHE_EXPIRATION,
+) -> None:
+    """Prune news which already are in cache."""
+    item_expiration = int(time.time()) + expiration
+    for key in list(news.keys()):
+        if key in cache.items:
+            logger.debug("Key %s found in cache", key)
+            cache.items[key] = item_expiration
+            news.pop(key)
 
 
 def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
@@ -215,32 +303,38 @@ def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
     if not cache_file:
         return CachedData()
 
-    if not os.path.exists(cache_file):
-        logger.warning("Cache file '%s' doesn't exist.", cache_file)
-        return CachedData()
-
-    with open(cache_file, "rb") as fhandle:
-        try:
+    try:
+        with open(cache_file, "rb") as fhandle:
             cache = pickle.load(fhandle)
-        except EOFError:
-            # Note: occurred with empty file.
-            cache = CachedData()
-            logger.debug(
-                "Cache file is probably empty: %s", traceback.format_exc()
-            )
+    except FileNotFoundError:
+        cache = CachedData()
+        logger.warning("Cache file '%s' doesn't exist.", cache_file)
+    except EOFError:
+        # Note: occurred with empty file.
+        cache = CachedData()
+        logger.debug(
+            "Cache file '%s' is probably empty: %s",
+            cache_file,
+            traceback.format_exc(),
+        )
 
-    logger.debug(cache)
+    logger.debug("%s", cache)
     return cache
 
 
-def scrub_cache(logger: logging.Logger, cache: CachedData) -> None:
+def signal_handler(signum, frame):
+    """Handle SIGALRM signal."""
+    raise ValueError
+
+
+def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = time.time()
     for key in list(cache.items.keys()):
         try:
             expiration = int(cache.items[key])
         except ValueError:
-            logger.error(traceback.format_exc())
+            logger.error("%s", traceback.format_exc())
             logger.error(
                 "Invalid cache entry will be removed: '%s'", cache.items[key]
             )
@@ -252,9 +346,15 @@ def scrub_cache(logger: logging.Logger, cache: CachedData) -> None:
             cache.items.pop(key)
 
 
-def signal_handler(signum, frame):
-    """Handle SIGALRM signal."""
-    raise ValueError
+def update_items_expiration(
+    cache: CachedData,
+    news: Dict[str, Tuple[str, str]],
+    expiration: int = CACHE_EXPIRATION,
+) -> None:
+    """Update expiration of items in cache based on news dict."""
+    item_expiration = int(time.time()) + expiration
+    for key in list(news.keys()):
+        cache.items[key] = item_expiration
 
 
 def write_cache(data: CachedData, cache_file: str) -> None:
@@ -281,7 +381,7 @@ def write_data(
                 write_message(logger, fhandle, message)
                 time.sleep(sleep)
             except ValueError:
-                logger.debug(traceback.format_exc())
+                logger.debug("%s", traceback.format_exc())
                 logger.debug("Failed to write %s, %s", url, data[url])
                 data.pop(url)
 

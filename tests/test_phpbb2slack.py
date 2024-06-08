@@ -117,22 +117,6 @@ def test_main_ideal(
         "https://phpbb.example.com/threads/something-of-something.424837/",
     ]
     expected_slack_channel = "test"
-
-    # Mock/set SLACK_TOKEN
-    monkeypatch.setenv("SLACK_TOKEN", "test")
-    # Mock HTTP RSS
-    rss_fname = os.path.join(SCRIPT_PATH, "files", "phpbb-rss.xml")
-    with open(rss_fname, "rb") as fhandle:
-        rss_data = fhandle.read().decode("utf-8")
-
-    mock_http_rss = fixture_mock_requests.get(rss_url, text=rss_data)
-    # Mock Slack HTTP request
-    fixture_http_server.serve_content(
-        '{"ok": "true", "error": ""}',
-        200,
-        {"Content-Type": "application/json"},
-    )
-    fixture_http_server.capture_requests = True
     expected_slack_requests = [
         {
             "blocks": [
@@ -151,8 +135,38 @@ def test_main_ideal(
             "channel": expected_slack_channel,
         }
     ]
+
+    # Mock/set SLACK_TOKEN
+    monkeypatch.setenv("SLACK_TOKEN", "test")
+    # Mock HTTP RSS
+    rss_fname = os.path.join(SCRIPT_PATH, "files", "phpbb-rss.xml")
+    with open(rss_fname, "rb") as fhandle:
+        rss_data = fhandle.read().decode("utf-8")
+
+    mock_http_rss = fixture_mock_requests.get(
+        rss_url,
+        text=rss_data,
+        headers={"ETag": "pytest_etag", "Last-Modified": "pytest_lm"},
+    )
+    # Mock Slack HTTP request
+    fixture_http_server.serve_content(
+        '{"ok": "true", "error": ""}',
+        200,
+        {"Content-Type": "application/json"},
+    )
+    fixture_http_server.capture_requests = True
+
+    cache = rss2irc.CachedData()
+    source1 = cache.get_source_by_url(rss_url)
+    source1.http_etag = ""
+    source1.http_last_modified = ""
+    source1.last_used_ts = int(time.time()) - 2 * 86400
+    source2 = cache.get_source_by_url("http://delete.example.com")
+    source2.last_used_ts = int(time.time()) - 2 * rss2irc.DATA_SOURCE_EXPIRATION
+    rss2irc.write_cache(cache, fixture_cache_file)
     #
     authors_file = os.path.join(SCRIPT_PATH, "files", "authors.txt")
+    logger = logging.getLogger("test")
     exception = None
     args = [
         "./phpbb2slack.py",
@@ -196,10 +210,16 @@ def test_main_ideal(
     assert exception.code == 0
     assert out.getvalue().strip() == ""
     # Check cache and keys in it
-    logger = logging.getLogger("test")
     cache = rss2irc.read_cache(logger, fixture_cache_file)
     print("Cache: {}".format(cache))
     assert list(cache.items.keys()) == expected_cache_keys
+    assert rss_url in cache.data_sources.keys()
+    source = cache.get_source_by_url(rss_url)
+    assert source.url == rss_url
+    assert source.http_etag == "pytest_etag"
+    assert source.http_last_modified == "pytest_lm"
+    assert source.last_used_ts > int(time.time()) - 60
+    assert "http://delete.example.com" not in cache.data_sources
     # Check HTTP RSS mock
     assert mock_http_rss.called is True
     assert mock_http_rss.call_count == 1
@@ -212,6 +232,126 @@ def test_main_ideal(
     assert req0[0] == "POST"
     data = json.loads(req0[1])
     assert data == expected_slack_requests[0]
+
+
+def test_main_cache_hit(
+    monkeypatch, fixture_mock_requests, fixture_cache_file, fixture_http_server
+):
+    """Test that HTTP Status Code 304 is handled as expected."""
+    handle = "test"
+    http_timeout = "10"
+    rss_url = "http://rss.example.com"
+    expected_cache_keys = []
+    expected_slack_channel = "test"
+
+    # Mock/set SLACK_TOKEN
+    monkeypatch.setenv("SLACK_TOKEN", "test")
+    # Mock HTTP RSS
+    mock_http_rss = fixture_mock_requests.get(
+        rss_url,
+        status_code=304,
+        text="",
+        headers={"ETag": "pytest_etag", "Last-Modified": "pytest_lm"},
+    )
+    # Mock Slack HTTP request
+    fixture_http_server.serve_content(
+        "Should not be called",
+        500,
+        {"Content-Type": "application/json"},
+    )
+    fixture_http_server.capture_requests = True
+
+    cache = rss2irc.CachedData()
+    source1 = cache.get_source_by_url(rss_url)
+    source1.http_etag = "pytest_etag"
+    source1.http_last_modified = "pytest_lm"
+    source1.last_used_ts = int(time.time()) - 2 * 86400
+    rss2irc.write_cache(cache, fixture_cache_file)
+    #
+    authors_file = os.path.join(SCRIPT_PATH, "files", "authors.txt")
+    logger = logging.getLogger("test")
+    exception = None
+    args = [
+        "./phpbb2slack.py",
+        "--authors-of-interest",
+        authors_file,
+        "--cache",
+        fixture_cache_file,
+        "--handle",
+        handle,
+        "--rss-url",
+        rss_url,
+        "--rss-http-timeout",
+        http_timeout,
+        "--slack-base-url",
+        fixture_http_server.url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-v",
+    ]
+
+    print("RSS URL: {:s}".format(rss_url))
+    print("Slack URL: {:s}".format(fixture_http_server.url))
+    print("Handle: {:s}".format(handle))
+    print("Cache file: {:s}".format(fixture_cache_file))
+
+    saved_stdout = sys.stdout
+    out = io.StringIO()
+    sys.stdout = out
+
+    with patch.object(sys, "argv", args):
+        try:
+            phpbb2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+        finally:
+            sys.stdout = saved_stdout
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == 0
+    assert out.getvalue().strip() == ""
+    # Check cache and keys in it
+    cache = rss2irc.read_cache(logger, fixture_cache_file)
+    print("Cache: {}".format(cache))
+    assert list(cache.items.keys()) == expected_cache_keys
+    assert rss_url in cache.data_sources.keys()
+    source = cache.get_source_by_url(rss_url)
+    assert source.url == rss_url
+    assert source.http_etag == "pytest_etag"
+    assert source.http_last_modified == "pytest_lm"
+    assert source.last_used_ts > int(time.time()) - 60
+    assert "http://delete.example.com" not in cache.data_sources
+    # Check HTTP RSS mock
+    assert mock_http_rss.called is True
+    assert mock_http_rss.call_count == 1
+    assert mock_http_rss.last_request.text is None
+    # Check HTTP Slack
+    assert len(fixture_http_server.requests) == 0
+
+
+def test_parse_news():
+    """Test parse_news()."""
+    expected_news = {
+        "https://phpbb.example.com/threads/something-of-something.424837/": {
+            "title": "Some other problem",
+            "category": None,
+            "comments_cnt": 0,
+        },
+        "https://phpbb.example.com/threads/something-not-received.424836/": {
+            "title": "Something not received",
+            "category": None,
+            "comments_cnt": 1,
+        },
+    }
+
+    rss_fname = os.path.join(SCRIPT_PATH, "files", "phpbb-rss.xml")
+    with open(rss_fname, "rb") as fhandle:
+        rss_data = fhandle.read().decode("utf-8")
+
+    result = phpbb2slack.parse_news(rss_data, [])
+    assert result == expected_news
 
 
 @pytest.mark.parametrize(
@@ -239,11 +379,11 @@ def test_main_ideal(
         )
     ],
 )
-def test_scrub_cache(cache, expected_cache):
-    """Test scrub_cache()."""
+def test_scrub_items(cache, expected_cache):
+    """Test scrub_items()."""
     logger = logging.getLogger()
     logger.disabled = True
-    phpbb2slack.scrub_cache(logger, cache)
+    phpbb2slack.scrub_items(logger, cache)
     assert cache.items == expected_cache
 
 
@@ -269,19 +409,23 @@ def test_scrub_cache(cache, expected_cache):
             ),
             {
                 "http://example.com": {
-                    "expiration": get_item_expiration() + 60,
+                    "expiration": 1717576487 + 60,
                     "comments_cnt": 2,
                 },
                 "http://www.example.com": {
-                    "expiration": get_item_expiration() + 60,
+                    "expiration": 1717576487 + 60,
                     "comments_cnt": 20,
                 },
             },
-            get_item_expiration() + 60,
+            60,
         )
     ],
 )
-def test_update_cache(news, cache, expected_cache, item_expiration):
-    """Test update_cache()."""
-    phpbb2slack.update_cache(cache, news, item_expiration)
+@patch("phpbb2slack.time.time")
+def test_update_items_expiration(
+    mock_time, news, cache, expected_cache, item_expiration
+):
+    """Test update_items_expiration()."""
+    mock_time.return_value = 1717576487
+    phpbb2slack.update_items_expiration(cache, news, item_expiration)
     assert cache.items == expected_cache

@@ -78,24 +78,32 @@ def main():
 
     try:
         slack_token = get_slack_token()
-        data = rss2irc.get_rss(logger, args.rss_url, args.rss_http_timeout)
-        if not data:
+        cache = rss2irc.read_cache(logger, args.cache)
+        source = cache.get_source_by_url(args.rss_url)
+
+        rsp = rss2irc.get_rss(
+            logger,
+            args.rss_url,
+            args.rss_http_timeout,
+            source.make_caching_headers(),
+        )
+        if rsp.status_code == 304:
+            logger.debug("No new RSS data since the last run")
+            rss2irc.write_cache(cache, args.cache)
+            sys.exit(0)
+
+        if not rsp.text:
             logger.error("Failed to get RSS from %s", args.rss_url)
             sys.exit(1)
 
-        news = rss2irc.parse_news(data)
+        news = rss2irc.parse_news(rsp.text)
         if not news:
             logger.info("No news?")
             sys.exit(0)
 
-        cache = rss2irc.read_cache(logger, args.cache)
-        rss2irc.scrub_cache(logger, cache)
-
-        for key in list(news.keys()):
-            if key in cache.items:
-                logger.debug("Key %s found in cache", key)
-                cache.items[key] = int(time.time()) + args.cache_expiration
-                news.pop(key)
+        source.extract_caching_headers(rsp.headers)
+        rss2irc.scrub_items(logger, cache)
+        rss2irc.prune_news(logger, cache, news, args.cache_expiration)
 
         slack_client = get_slack_web_client(
             slack_token,
@@ -117,14 +125,12 @@ def main():
                 finally:
                     time.sleep(args.sleep)
 
-        expiration = int(time.time()) + args.cache_expiration
-        for key in list(news.keys()):
-            cache.items[key] = expiration
-
+        rss2irc.update_items_expiration(cache, news, args.cache_expiration)
+        cache.scrub_data_sources()
         rss2irc.write_cache(cache, args.cache)
         # TODO(zstyblik): remove error file
     except Exception:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         # TODO(zstyblik):
         # 1. touch error file
         # 2. send error message to the channel
@@ -146,7 +152,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-expiration",
         dest="cache_expiration",
         type=int,
-        default=rss2irc.EXPIRATION,
+        default=rss2irc.CACHE_EXPIRATION,
         help="Time, in seconds, for how long to keep items in cache.",
     )
     parser.add_argument(
@@ -242,7 +248,7 @@ def post_to_slack(
         if not rsp or rsp["ok"] is False:
             raise ValueError("Slack response is not OK.")
     except ValueError:
-        logger.debug(traceback.format_exc())
+        logger.debug("%s", traceback.format_exc())
         raise
 
 
