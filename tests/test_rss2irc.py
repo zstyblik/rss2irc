@@ -248,6 +248,112 @@ def test_main_ideal(
 
 
 @patch("rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.time.time")
+def test_main_cache_operations(
+    mock_time,
+    mock_s_isfifo,
+    fixture_http_server,
+    fixture_cache_file,
+    fixture_output_file,
+):
+    """End-to-end test - verify cache scrubbing and expiration refresh."""
+    handle = "test"
+    http_timeout = "10"
+    rss_url = fixture_http_server.url
+    expected_cache_keys = [
+        "http://www.example.com/scan.php?page=news_item&px=item1",
+        "http://www.example.com/scan.php?page=news_item&px=item2",
+    ]
+    expected_output = [
+        (
+            b"[test] Item2 | "
+            b"http://www.example.com/scan.php?page=news_item&px=item2\n"
+        ),
+    ]
+    cache_key = "http://www.example.com/scan.php?page=news_item&px=item1"
+    frozen_ts = 1218002161
+
+    mock_s_isfifo.return_value = True
+    mock_time.return_value = frozen_ts
+    rss_fname = os.path.join(SCRIPT_PATH, "files", "rss.xml")
+    with open(rss_fname, "rb") as fhandle:
+        fixture_http_server.serve_content(
+            fhandle.read().decode("utf-8"),
+            200,
+            {"ETag": "pytest_etag", "Last-Modified": "pytest_lm"},
+        )
+
+    cache = rss2irc.CachedData()
+    cache.items[cache_key] = frozen_ts + 60
+    cache.items["https://expired.example.com"] = 123456
+    source1 = cache.get_source_by_url(rss_url)
+    source1.http_etag = ""
+    source1.http_last_modified = ""
+    source1.last_used_ts = frozen_ts - 2 * 86400
+    source2 = cache.get_source_by_url("http://delete.example.com")
+    source2.last_used_ts = frozen_ts - 2 * rss2irc.DATA_SOURCE_EXPIRATION
+    rss2irc.write_cache(cache, fixture_cache_file)
+
+    logger = logging.getLogger("test")
+    exception = None
+    args = [
+        "./rss2irc.py",
+        "-v",
+        "--rss-url",
+        rss_url,
+        "--rss-http-timeout",
+        http_timeout,
+        "--handle",
+        handle,
+        "--cache",
+        fixture_cache_file,
+        "--output",
+        fixture_output_file,
+    ]
+
+    print("URL: {:s}".format(rss_url))
+    print("Handle: {:s}".format(handle))
+    print("Cache file: {:s}".format(fixture_cache_file))
+    print("Output file: {:s}".format(fixture_output_file))
+
+    saved_stdout = sys.stdout
+    out = io.StringIO()
+    sys.stdout = out
+
+    with patch.object(sys, "argv", args):
+        try:
+            rss2irc.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+        finally:
+            sys.stdout = saved_stdout
+
+    with open(fixture_output_file, "rb") as fhandle:
+        output = fhandle.readlines()
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == 0
+    assert out.getvalue().strip() == ""
+    assert mock_s_isfifo.called is True
+    # Check cache - keys in it and sources
+    cache = rss2irc.read_cache(logger, fixture_cache_file)
+    print("Cache: {}".format(cache))
+    assert list(cache.items.keys()) == expected_cache_keys
+    # Verify item expiration is updated
+    assert cache.items[cache_key] == frozen_ts + rss2irc.CACHE_EXPIRATION
+    # Verify data sources
+    assert rss_url in cache.data_sources.keys()
+    source = cache.get_source_by_url(rss_url)
+    assert source.url == rss_url
+    assert source.http_etag == "pytest_etag"
+    assert source.http_last_modified == "pytest_lm"
+    assert source.last_used_ts == frozen_ts
+    assert "http://delete.example.com" not in cache.data_sources
+    # check output file
+    assert sorted(output) == sorted(expected_output)
+
+
+@patch("rss2irc.stat.S_ISFIFO")
 def test_main_cache_hit(
     mock_s_isfifo,
     fixture_mock_requests,
