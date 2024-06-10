@@ -102,8 +102,8 @@ def main():
             sys.exit(0)
 
         source.extract_caching_headers(rsp.headers)
-        rss2irc.scrub_items(logger, cache)
         rss2irc.prune_news(logger, cache, news, args.cache_expiration)
+        rss2irc.scrub_items(logger, cache)
 
         slack_client = get_slack_web_client(
             slack_token,
