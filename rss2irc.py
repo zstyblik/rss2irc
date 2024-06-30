@@ -12,8 +12,6 @@ import stat
 import sys
 import time
 import traceback
-from dataclasses import dataclass
-from dataclasses import field
 from typing import BinaryIO
 from typing import Dict
 from typing import Tuple
@@ -21,74 +19,8 @@ from typing import Tuple
 import feedparser
 import requests
 
-CACHE_EXPIRATION = 86400  # seconds
-DATA_SOURCE_EXPIRATION = 30 * 86400  # seconds
-HTTP_TIMEOUT = 30  # seconds
-
-
-@dataclass
-class HTTPSource:
-    """Class represents HTTP data source."""
-
-    http_etag: str = field(default_factory=str)
-    http_last_modified: str = field(default_factory=str)
-    last_used_ts: int = 0
-    url: str = field(default_factory=str)
-
-    def extract_caching_headers(self, headers: Dict[str, str]) -> None:
-        """Extract cache related headers from given dict."""
-        self.http_etag = ""
-        self.http_last_modified = ""
-        for key, value in headers.items():
-            key = key.lower()
-            if key == "etag":
-                self.http_etag = value
-            elif key == "last-modified":
-                self.http_last_modified = value
-
-    def make_caching_headers(self) -> Dict[str, str]:
-        """Return cache related headers as a dict."""
-        headers = {}
-        if self.http_etag:
-            headers["if-none-match"] = self.http_etag
-
-        if self.http_last_modified:
-            headers["if-modified-since"] = self.http_last_modified
-
-        return headers
-
-
-@dataclass
-class CachedData:
-    """CachedData represents locally cached data and state."""
-
-    data_sources: dict = field(default_factory=dict)
-    items: dict = field(default_factory=dict)
-
-    def get_source_by_url(self, url: str) -> HTTPSource:
-        """Return source by URL.
-
-        If source doesn't exist, it will be created.
-        """
-        source = self.data_sources.get(url, None)
-        if source:
-            source.last_used_ts = int(time.time())
-            return source
-
-        self.data_sources[url] = HTTPSource(
-            last_used_ts=int(time.time()), url=url
-        )
-        return self.get_source_by_url(url)
-
-    def scrub_data_sources(
-        self, expiration: int = DATA_SOURCE_EXPIRATION
-    ) -> None:
-        """Delete expired data sources."""
-        now = int(time.time())
-        for key in list(self.data_sources.keys()):
-            diff = now - self.data_sources[key].last_used_ts
-            if int(diff) > expiration:
-                self.data_sources.pop(key)
+from lib import CachedData  # noqa: I202
+from lib import config_options  # noqa: I202
 
 
 def format_message(
@@ -114,7 +46,7 @@ def format_message(
 def get_rss(
     logger: logging.Logger,
     url: str,
-    timeout: int = HTTP_TIMEOUT,
+    timeout: int = config_options.HTTP_TIMEOUT,
     extra_headers: Dict = None,
 ) -> requests.models.Response:
     """Return body of given URL as a string."""
@@ -215,8 +147,10 @@ def parse_args() -> argparse.Namespace:
         "--rss-http-timeout",
         dest="rss_http_timeout",
         type=int,
-        default=HTTP_TIMEOUT,
-        help="HTTP Timeout. Defaults to {:d} seconds.".format(HTTP_TIMEOUT),
+        default=config_options.HTTP_TIMEOUT,
+        help="HTTP Timeout. Defaults to {:d} seconds.".format(
+            config_options.HTTP_TIMEOUT
+        ),
     )
     parser.add_argument(
         "--handle",
@@ -243,7 +177,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-expiration",
         dest="cache_expiration",
         type=int,
-        default=CACHE_EXPIRATION,
+        default=config_options.CACHE_EXPIRATION,
         help="Time, in seconds, for how long to keep items in cache.",
     )
     parser.add_argument(
@@ -287,7 +221,7 @@ def prune_news(
     logger: logging.Logger,
     cache: CachedData,
     news: Dict[str, Tuple[str, str]],
-    expiration: int = CACHE_EXPIRATION,
+    expiration: int = config_options.CACHE_EXPIRATION,
 ) -> None:
     """Prune news which already are in cache."""
     item_expiration = int(time.time()) + expiration
@@ -349,7 +283,7 @@ def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
 def update_items_expiration(
     cache: CachedData,
     news: Dict[str, Tuple[str, str]],
-    expiration: int = CACHE_EXPIRATION,
+    expiration: int = config_options.CACHE_EXPIRATION,
 ) -> None:
     """Update expiration of items in cache based on news dict."""
     item_expiration = int(time.time()) + expiration

@@ -12,8 +12,9 @@ from unittest.mock import patch
 
 import pytest
 
-import gh2slack  # noqa:I100,I202
-import rss2irc  # noqa:I100,I202
+import gh2slack  # noqa: I100, I202
+import rss2irc  # noqa: I100, I202
+from lib import CachedData  # noqa: I100, I202
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -351,7 +352,7 @@ def test_process_page_items():
         ],
     ]
     repository_url = "http://example.com"
-    cache = rss2irc.CachedData(
+    cache = CachedData(
         items={
             "http://example.com/bar": {
                 "expiration": 0,
@@ -391,7 +392,7 @@ def test_process_page_items():
 def test_scrub_items():
     """Test scrub_items()."""
     item_expiration = int(time.time()) + 60
-    test_cache = rss2irc.CachedData(
+    test_cache = CachedData(
         items={
             "foo": {
                 "expiration": item_expiration,

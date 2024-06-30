@@ -17,7 +17,9 @@ from typing import Set
 import requests
 
 import rss2irc  # noqa: I202
-import rss2slack
+import rss2slack  # noqa: I202
+from lib import CachedData  # noqa: I202
+from lib import config_options  # noqa: I202
 
 ALIASES = {
     "issues": "issue",
@@ -101,7 +103,7 @@ def gh_parse_next_page(link_header: str) -> str:
 
 
 def gh_request(
-    logger: logging.Logger, url: str, timeout: int = rss2irc.HTTP_TIMEOUT
+    logger: logging.Logger, url: str, timeout: int = config_options.HTTP_TIMEOUT
 ) -> List:
     """Return list of responses from GitHub.
 
@@ -223,7 +225,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-expiration",
         dest="cache_expiration",
         type=int,
-        default=rss2irc.CACHE_EXPIRATION,
+        default=config_options.CACHE_EXPIRATION,
         help="Time, in seconds, for how long to keep items " "in cache.",
     )
     parser.add_argument(
@@ -275,9 +277,9 @@ def parse_args() -> argparse.Namespace:
         "--slack-timeout",
         dest="slack_timeout",
         type=int,
-        default=rss2irc.HTTP_TIMEOUT,
+        default=config_options.HTTP_TIMEOUT,
         help="Slack API Timeout. Defaults to {:d} seconds.".format(
-            rss2irc.HTTP_TIMEOUT
+            config_options.HTTP_TIMEOUT
         ),
     )
     parser.add_argument(
@@ -303,7 +305,7 @@ def parse_args() -> argparse.Namespace:
 
 def process_page_items(
     logger: logging.Logger,
-    cache: rss2irc.CachedData,
+    cache: CachedData,
     pages: List,
     expiration: int,
     repository_url: str,
@@ -347,7 +349,7 @@ def process_page_items(
     return to_publish
 
 
-def scrub_items(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
+def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = int(time.time())
     for key in list(cache.items.keys()):

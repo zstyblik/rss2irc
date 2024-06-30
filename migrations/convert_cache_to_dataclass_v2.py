@@ -14,14 +14,16 @@ import shutil
 import sys
 from importlib.machinery import SourceFileLoader
 
-# NOTICE: An ugly hack in order to be able to import CachedData class from
-# rss2irc. I'm real sorry about this, son.
-# NOTE: Sadly, importlib.util and spec didn't cut it. As usual, I'm out of time
-# on this. Therefore, see you again in the future once this ceases to work.
+# NOTICE: An ugly hack in order to be able to import CachedData class.
+# I'm real sorry about this, son.
+# NOTE: Sadly, importlib.util and spec didn't cut it. Also, I'm out of time on
+# this. Therefore, see you again in the future once this ceases to work.
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
+lib_module_path = os.path.join(SCRIPT_PATH, "..", "lib", "__init__.py")
+lib = SourceFileLoader("lib", lib_module_path).load_module()
 rss2irc_module_path = os.path.join(SCRIPT_PATH, "..", "rss2irc.py")
 rss2irc = SourceFileLoader("rss2irc", rss2irc_module_path).load_module()
-CachedData = rss2irc.CachedData
+CachedData = lib.cached_data.CachedData
 
 
 def main():
@@ -43,7 +45,7 @@ def main():
     logger.info("Create backup file '%s' from '%s'.", bak_file, args.cache)
     shutil.copy2(args.cache, bak_file)
 
-    new_cache = rss2irc.CachedData()
+    new_cache = CachedData()
     for key, value in cache.items.items():
         new_cache.items[key] = value
 
