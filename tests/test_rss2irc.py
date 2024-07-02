@@ -9,122 +9,11 @@ from unittest.mock import patch
 
 import pytest
 
-import rss2irc  # noqa:I202
+import rss2irc  # noqa: I202
+from lib import CachedData  # noqa: I202
+from lib import config_options  # noqa: I202
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
-
-
-@pytest.mark.parametrize(
-    "source,input_data,expected",
-    [
-        # No attrs should bet set
-        (
-            rss2irc.HTTPSource(),
-            {},
-            {"etag": "", "last_modified": ""},
-        ),
-        # Reset aatrs
-        (
-            rss2irc.HTTPSource(
-                http_etag="et_test", http_last_modified="lm_test"
-            ),
-            {"header1": "firt", "header2": "second"},
-            {"etag": "", "last_modified": ""},
-        ),
-        # Set attrs
-        (
-            rss2irc.HTTPSource(
-                http_etag="et_test", http_last_modified="lm_test"
-            ),
-            {"ETag": "test123", "Last-Modified": "abc123", "some": "header"},
-            {"etag": "test123", "last_modified": "abc123"},
-        ),
-    ],
-)
-def test_http_source_extract_caching_headers(source, input_data, expected):
-    """Test that HTTPSource.extract_caching_headers() works as expected."""
-    source.extract_caching_headers(input_data)
-    assert source.http_etag == expected["etag"]
-    assert source.http_last_modified == expected["last_modified"]
-
-
-@pytest.mark.parametrize(
-    "source,expected",
-    [
-        (
-            rss2irc.HTTPSource(),
-            {},
-        ),
-        (
-            rss2irc.HTTPSource(http_etag="et_test"),
-            {"if-none-match": "et_test"},
-        ),
-        (
-            rss2irc.HTTPSource(http_last_modified="lm_test"),
-            {"if-modified-since": "lm_test"},
-        ),
-        (
-            rss2irc.HTTPSource(
-                http_etag="et_test", http_last_modified="lm_test"
-            ),
-            {"if-modified-since": "lm_test", "if-none-match": "et_test"},
-        ),
-    ],
-)
-def test_http_source_make_caching_headers(source, expected):
-    """Test that HTTPSource.make_caching_headers() works as expected."""
-    result = source.make_caching_headers()
-    assert result == expected
-
-
-@patch("rss2irc.time.time")
-def test_cache_get_source_by_url(mock_time):
-    """Test that CachedData.get_source_by_url() sets last_used_ts attr."""
-    mock_time.return_value = 1717428213
-    url = "http://example.com"
-    source = rss2irc.HTTPSource(
-        last_used_ts=0,
-        url=url,
-    )
-    cache = rss2irc.CachedData(
-        data_sources={
-            url: source,
-        }
-    )
-    result = cache.get_source_by_url(url)
-    assert result == source
-    assert result.last_used_ts == 1717428213
-
-
-def test_cache_scrub_data_sources_empty(cache):
-    """Test that CachedData.scrub_data_sources() when there are no sources."""
-    cache = rss2irc.CachedData()
-    assert not cache.data_sources
-    cache.scrub_data_sources()
-    assert not cache.data_sources
-
-
-def test_cache_scrub_data_sources(cache):
-    """Test that CachedData.scrub_data_sources() expired source is removed."""
-    source1_url = "http://ww1.example.com"
-    source2_url = "http://ww2.example.com"
-    cache = rss2irc.CachedData()
-    source1 = cache.get_source_by_url(source1_url)
-    assert source1.last_used_ts > 0
-    source1.last_used_ts = int(time.time()) - 2 * rss2irc.DATA_SOURCE_EXPIRATION
-
-    source2 = cache.get_source_by_url(source2_url)
-    assert source2.last_used_ts > 0
-
-    assert "http://ww1.example.com" in cache.data_sources
-    assert source1.url == source1_url
-    assert "http://ww2.example.com" in cache.data_sources
-    assert source2.url == source2_url
-
-    cache.scrub_data_sources()
-
-    assert "http://ww1.example.com" not in cache.data_sources
-    assert "http://ww2.example.com" in cache.data_sources
 
 
 @pytest.mark.parametrize(
@@ -183,13 +72,15 @@ def test_main_ideal(
             {"ETag": "pytest_etag", "Last-Modified": "pytest_lm"},
         )
 
-    cache = rss2irc.CachedData()
+    cache = CachedData()
     source1 = cache.get_source_by_url(rss_url)
     source1.http_etag = ""
     source1.http_last_modified = ""
     source1.last_used_ts = int(time.time()) - 2 * 86400
     source2 = cache.get_source_by_url("http://delete.example.com")
-    source2.last_used_ts = int(time.time()) - 2 * rss2irc.DATA_SOURCE_EXPIRATION
+    source2.last_used_ts = (
+        int(time.time()) - 2 * config_options.DATA_SOURCE_EXPIRATION
+    )
     rss2irc.write_cache(cache, fixture_cache_file)
 
     logger = logging.getLogger("test")
@@ -283,7 +174,7 @@ def test_main_cache_operations(
             {"ETag": "pytest_etag", "Last-Modified": "pytest_lm"},
         )
 
-    cache = rss2irc.CachedData()
+    cache = CachedData()
     cache.items[cache_key] = frozen_ts + 60
     cache.items["https://expired.example.com"] = 123456
     source1 = cache.get_source_by_url(rss_url)
@@ -291,7 +182,7 @@ def test_main_cache_operations(
     source1.http_last_modified = ""
     source1.last_used_ts = frozen_ts - 2 * 86400
     source2 = cache.get_source_by_url("http://delete.example.com")
-    source2.last_used_ts = frozen_ts - 2 * rss2irc.DATA_SOURCE_EXPIRATION
+    source2.last_used_ts = frozen_ts - 2 * config_options.DATA_SOURCE_EXPIRATION
     rss2irc.write_cache(cache, fixture_cache_file)
 
     logger = logging.getLogger("test")
@@ -340,7 +231,7 @@ def test_main_cache_operations(
     print("Cache: {}".format(cache))
     assert list(cache.items.keys()) == expected_cache_keys
     # Verify item expiration is updated
-    assert cache.items[cache_key] == frozen_ts + rss2irc.CACHE_EXPIRATION
+    assert cache.items[cache_key] == frozen_ts + config_options.CACHE_EXPIRATION
     # Verify data sources
     assert rss_url in cache.data_sources.keys()
     source = cache.get_source_by_url(rss_url)
@@ -378,7 +269,7 @@ def test_main_cache_hit(
         },
     )
 
-    cache = rss2irc.CachedData()
+    cache = CachedData()
     source1 = cache.get_source_by_url(rss_url)
     source1.http_etag = "pytest_etag"
     source1.http_last_modified = "pytest_last_modified"
@@ -471,7 +362,7 @@ def test_scrub_items():
     logger.disabled = True
 
     item_expiration = int(time.time()) + 60
-    test_cache = rss2irc.CachedData(
+    test_cache = CachedData(
         items={
             "foo": item_expiration,
             "bar": int(time.time()) - 3600,

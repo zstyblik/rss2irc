@@ -10,8 +10,10 @@ from unittest.mock import patch
 
 import pytest
 
-import phpbb2slack  # noqa:I100,I202
-import rss2irc
+import phpbb2slack  # noqa: I100, I202
+import rss2irc  # noqa: I100, I202
+from lib import CachedData  # noqa: I100, I202
+from lib import config_options  # noqa: I100, I202
 
 ITEM_EXPIRATION = int(time.time())
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -156,13 +158,15 @@ def test_main_ideal(
     )
     fixture_http_server.capture_requests = True
 
-    cache = rss2irc.CachedData()
+    cache = CachedData()
     source1 = cache.get_source_by_url(rss_url)
     source1.http_etag = ""
     source1.http_last_modified = ""
     source1.last_used_ts = int(time.time()) - 2 * 86400
     source2 = cache.get_source_by_url("http://delete.example.com")
-    source2.last_used_ts = int(time.time()) - 2 * rss2irc.DATA_SOURCE_EXPIRATION
+    source2.last_used_ts = (
+        int(time.time()) - 2 * config_options.DATA_SOURCE_EXPIRATION
+    )
     rss2irc.write_cache(cache, fixture_cache_file)
     #
     authors_file = os.path.join(SCRIPT_PATH, "files", "authors.txt")
@@ -261,7 +265,7 @@ def test_main_cache_hit(
     )
     fixture_http_server.capture_requests = True
 
-    cache = rss2irc.CachedData()
+    cache = CachedData()
     source1 = cache.get_source_by_url(rss_url)
     source1.http_etag = "pytest_etag"
     source1.http_last_modified = "pytest_lm"
@@ -358,7 +362,7 @@ def test_parse_news():
     "cache,expected_cache",
     [
         (
-            rss2irc.CachedData(
+            CachedData(
                 items={
                     "foo": {
                         "expiration": get_item_expiration() + 60,
@@ -399,7 +403,7 @@ def test_scrub_items(cache, expected_cache):
                     "comments_cnt": 20,
                 },
             },
-            rss2irc.CachedData(
+            CachedData(
                 items={
                     "http://example.com": {
                         "expiration": 0,

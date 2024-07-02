@@ -14,10 +14,9 @@ from typing import List
 import feedparser
 
 import rss2irc  # noqa: I202
-import rss2slack
-
-CACHE_EXPIRATION = 86400  # seconds
-HTTP_TIMEOUT = 30  # seconds
+import rss2slack  # noqa: I202
+from lib import CachedData  # noqa: I202
+from lib import config_options  # noqa: I202
 
 
 def format_message(
@@ -163,7 +162,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-expiration",
         dest="cache_expiration",
         type=int,
-        default=CACHE_EXPIRATION,
+        default=config_options.CACHE_EXPIRATION,
         help="Time, in seconds, for how long to keep items in cache.",
     )
     parser.add_argument(
@@ -194,8 +193,10 @@ def parse_args() -> argparse.Namespace:
         "--rss-http-timeout",
         dest="rss_http_timeout",
         type=int,
-        default=HTTP_TIMEOUT,
-        help="HTTP Timeout. Defaults to {:d} seconds.".format(HTTP_TIMEOUT),
+        default=config_options.HTTP_TIMEOUT,
+        help="HTTP Timeout. Defaults to {:d} seconds.".format(
+            config_options.HTTP_TIMEOUT
+        ),
     )
     parser.add_argument(
         "--slack-base-url",
@@ -215,9 +216,9 @@ def parse_args() -> argparse.Namespace:
         "--slack-timeout",
         dest="slack_timeout",
         type=int,
-        default=HTTP_TIMEOUT,
+        default=config_options.HTTP_TIMEOUT,
         help="Slack API Timeout. Defaults to {:d} seconds.".format(
-            HTTP_TIMEOUT
+            config_options.HTTP_TIMEOUT
         ),
     )
     parser.add_argument(
@@ -274,9 +275,9 @@ def parse_news(data: str, authors: List[str]) -> Dict:
 
 def prune_news(
     logger: logging.Logger,
-    cache: rss2irc.CachedData,
+    cache: CachedData,
     news: Dict[str, Dict],
-    expiration: int = CACHE_EXPIRATION,
+    expiration: int = config_options.CACHE_EXPIRATION,
 ) -> None:
     """Prune news which already are in cache."""
     item_expiration = int(time.time()) + expiration
@@ -292,7 +293,7 @@ def prune_news(
             news.pop(key)
 
 
-def scrub_items(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
+def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
     """Scrub cache and remove expired items."""
     time_now = int(time.time())
     for key in list(cache.items.keys()):
@@ -312,7 +313,7 @@ def scrub_items(logger: logging.Logger, cache: rss2irc.CachedData) -> None:
 
 
 def update_items_expiration(
-    cache: rss2irc.CachedData, news: Dict, expiration: int
+    cache: CachedData, news: Dict, expiration: int
 ) -> None:
     """Update cache contents."""
     item_expiration = int(time.time()) + expiration

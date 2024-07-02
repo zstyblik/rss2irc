@@ -8,7 +8,8 @@ import tempfile
 
 import pytest
 
-import rss2irc  # noqa:I202
+import rss2irc  # noqa: I202
+from lib import CachedData  # noqa: I202
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -57,7 +58,7 @@ def test_migration(fixture_cache_file, fixture_bak_cleanup):
     with open(fixture_cache_file, "wb") as fhandle:
         pickle.dump(test_data, fhandle, pickle.HIGHEST_PROTOCOL)
 
-    expected_cache = rss2irc.CachedData(
+    expected_cache = CachedData(
         items={
             "test1": 1234,
             "test2": 0,

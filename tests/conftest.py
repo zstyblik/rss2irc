@@ -19,7 +19,7 @@ class MyContentServer(ContentServer):
     def __init__(self, capture_requests=False, *args, **kwargs):
         """Init."""
         self.captured_requests = []
-        self.capture_requests = False
+        self.capture_requests = capture_requests
         super(MyContentServer, self).__init__(*args, **kwargs)
 
     def __call__(self, environ, start_response):

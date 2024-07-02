@@ -10,6 +10,7 @@ import traceback
 from dataclasses import dataclass
 
 import rss2irc
+from lib import CachedData
 
 BUCKET_COUNT = 10
 
@@ -24,7 +25,7 @@ class Bucket:
 
 
 def calc_distribution(
-    logger: logging.Logger, cache: rss2irc.CachedData, buckets
+    logger: logging.Logger, cache: CachedData, buckets
 ) -> int:
     """Calculate item distribution inside cache."""
     keys = list(buckets.keys())
@@ -70,7 +71,7 @@ def get_timestamp(data) -> int:
 
 
 def get_timestamp_minmax(
-    logger: logging.Logger, cache: rss2irc.CachedData
+    logger: logging.Logger, cache: CachedData
 ) -> (int, int, int):
     """Return timestamp min, max and no. of errors."""
     ts_min = 99999999999

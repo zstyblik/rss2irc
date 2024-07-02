@@ -12,8 +12,9 @@ from unittest.mock import patch
 
 import pytest
 
-import gh2slack  # noqa:I100,I202
-import rss2irc  # noqa:I100,I202
+import gh2slack  # noqa: I100, I202
+import rss2irc  # noqa: I100, I202
+from lib import CachedData  # noqa: I100, I202
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -99,10 +100,12 @@ def test_gh_request(mock_get):
     assert mocked_response._raise_for_status_called is True
 
 
+@patch("gh2slack.time.time")
 @patch("requests.get")
-def test_gh_request_follows_link_header(mock_get):
+def test_gh_request_follows_link_header(mock_get, mock_time):
     """Test gh_request() follows up on 'Link' header."""
     url = "https://api.github.com/repos/foo/bar"
+    mock_time.return_value = 123
     mocked_response1 = MockedResponse(
         "foo", {"link": '<http://example.com>; rel="next"'}
     )
@@ -111,13 +114,19 @@ def test_gh_request_follows_link_header(mock_get):
     expected_mock_calls = [
         call(
             "https://api.github.com/repos/foo/bar",
-            headers={"Accept": "application/vnd.github.v3+json"},
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "gh2slack_123",
+            },
             params={"sort": "created", "state": "open"},
             timeout=30,
         ),
         call(
             "http://example.com",
-            headers={"Accept": "application/vnd.github.v3+json"},
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "gh2slack_123",
+            },
             params={"sort": "created", "state": "open"},
             timeout=30,
         ),
@@ -351,7 +360,7 @@ def test_process_page_items():
         ],
     ]
     repository_url = "http://example.com"
-    cache = rss2irc.CachedData(
+    cache = CachedData(
         items={
             "http://example.com/bar": {
                 "expiration": 0,
@@ -391,7 +400,7 @@ def test_process_page_items():
 def test_scrub_items():
     """Test scrub_items()."""
     item_expiration = int(time.time()) + 60
-    test_cache = rss2irc.CachedData(
+    test_cache = CachedData(
         items={
             "foo": {
                 "expiration": item_expiration,

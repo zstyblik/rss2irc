@@ -6,8 +6,9 @@ import sys
 import time
 from unittest.mock import patch
 
-import cache_stats  # noqa:I202
-import rss2irc  # noqa:I202
+import cache_stats  # noqa: I202
+import rss2irc  # noqa: I202
+from lib import CachedData  # noqa: I202
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -16,7 +17,7 @@ def test_main_ideal(fixture_cache_file):
     """Simple run-through test."""
     rss_url = "https://example.com/rss"
 
-    cache = rss2irc.CachedData()
+    cache = CachedData()
     cache.items = {
         "a": int(time.time()),
         "b": int(time.time()),
