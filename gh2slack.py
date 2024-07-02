@@ -111,9 +111,13 @@ def gh_request(
     responses.
     """
     logger.debug("Requesting %s", url)
+    user_agent = "gh2slack_{:d}".format(int(time.time()))
     rsp = requests.get(
         url,
-        headers={"Accept": "application/vnd.github.v3+json"},
+        headers={
+            "Accept": "application/vnd.github.v3+json",
+            "User-Agent": user_agent,
+        },
         params={"state": "open", "sort": "created"},
         timeout=timeout,
     )

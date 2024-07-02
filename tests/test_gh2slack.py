@@ -100,10 +100,12 @@ def test_gh_request(mock_get):
     assert mocked_response._raise_for_status_called is True
 
 
+@patch("gh2slack.time.time")
 @patch("requests.get")
-def test_gh_request_follows_link_header(mock_get):
+def test_gh_request_follows_link_header(mock_get, mock_time):
     """Test gh_request() follows up on 'Link' header."""
     url = "https://api.github.com/repos/foo/bar"
+    mock_time.return_value = 123
     mocked_response1 = MockedResponse(
         "foo", {"link": '<http://example.com>; rel="next"'}
     )
@@ -112,13 +114,19 @@ def test_gh_request_follows_link_header(mock_get):
     expected_mock_calls = [
         call(
             "https://api.github.com/repos/foo/bar",
-            headers={"Accept": "application/vnd.github.v3+json"},
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "gh2slack_123",
+            },
             params={"sort": "created", "state": "open"},
             timeout=30,
         ),
         call(
             "http://example.com",
-            headers={"Accept": "application/vnd.github.v3+json"},
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "gh2slack_123",
+            },
             params={"sort": "created", "state": "open"},
             timeout=30,
         ),
