@@ -16,8 +16,8 @@ import traceback
 from typing import Dict
 from typing import List
 
-import rss2irc
 import rss2slack
+from lib import config_options
 
 RE_GIT_AUTD = re.compile(r"^Already up-to-date.$")
 RE_GIT_UPDATING = re.compile(r"^Updating [a-z0-9]+", re.I)
@@ -254,9 +254,9 @@ def parse_args() -> argparse.Namespace:
         "--slack-timeout",
         dest="slack_timeout",
         type=int,
-        default=rss2irc.HTTP_TIMEOUT,
+        default=config_options.HTTP_TIMEOUT,
         help="Slack API Timeout. Defaults to {:d} seconds.".format(
-            rss2irc.HTTP_TIMEOUT
+            config_options.HTTP_TIMEOUT
         ),
     )
     parser.add_argument(

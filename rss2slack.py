@@ -16,6 +16,7 @@ from typing import Tuple
 from slack import WebClient
 
 import rss2irc  # noqa: I100, I202
+from lib import config_options  # noqa: I100, I202
 
 SLACK_BASE_URL = WebClient.BASE_URL
 
@@ -152,7 +153,7 @@ def parse_args() -> argparse.Namespace:
         "--cache-expiration",
         dest="cache_expiration",
         type=int,
-        default=rss2irc.CACHE_EXPIRATION,
+        default=config_options.CACHE_EXPIRATION,
         help="Time, in seconds, for how long to keep items in cache.",
     )
     parser.add_argument(
@@ -183,9 +184,9 @@ def parse_args() -> argparse.Namespace:
         "--rss-http-timeout",
         dest="rss_http_timeout",
         type=int,
-        default=rss2irc.HTTP_TIMEOUT,
+        default=config_options.HTTP_TIMEOUT,
         help="HTTP Timeout. Defaults to {:d} seconds.".format(
-            rss2irc.HTTP_TIMEOUT
+            config_options.HTTP_TIMEOUT
         ),
     )
     parser.add_argument(
@@ -206,9 +207,9 @@ def parse_args() -> argparse.Namespace:
         "--slack-timeout",
         dest="slack_timeout",
         type=int,
-        default=rss2irc.HTTP_TIMEOUT,
+        default=config_options.HTTP_TIMEOUT,
         help="Slack API Timeout. Defaults to {:d} seconds.".format(
-            rss2irc.HTTP_TIMEOUT
+            config_options.HTTP_TIMEOUT
         ),
     )
     parser.add_argument(
