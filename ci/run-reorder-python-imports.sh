@@ -2,4 +2,5 @@
 set -e
 set -u
 
-reorder-python-imports --py311-plus `find . ! -path '*/\.*' -name '*.py'`
+find . ! -path '*/\.*' -name '*.py' -print0 | \
+    xargs -0 -- reorder-python-imports --py311-plus

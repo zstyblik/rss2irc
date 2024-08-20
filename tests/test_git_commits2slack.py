@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for git_commits2slack.py."""
 import io
-import json
 import os
 import subprocess
 import sys
@@ -311,7 +310,7 @@ def test_main_ideal(
         200,
         {"Content-Type": "application/json"},
     )
-    fixture_http_server.capture_requests = True
+    fixture_http_server.store_request_data = True
     expected_slack_requests = [
         {
             "blocks": [
@@ -384,7 +383,7 @@ def test_main_ideal(
     # Note: this is just a shallow check, but it's better than nothing.
     assert len(fixture_http_server.requests) == 1
 
-    req0 = fixture_http_server.captured_requests[0]
-    assert req0[0] == "POST"
-    data = json.loads(req0[1])
+    req0 = fixture_http_server.requests[0]
+    assert req0.method == "POST"
+    data = req0.get_json()
     assert data == expected_slack_requests[0]
