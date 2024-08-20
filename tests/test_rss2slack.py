@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Unit tests for rss2slack.py."""
 import io
-import json
 import logging
 import os
 import sys
@@ -150,7 +149,7 @@ def test_main_ideal(
         200,
         {"Content-Type": "application/json"},
     )
-    fixture_http_server.capture_requests = True
+    fixture_http_server.store_request_data = True
 
     cache = CachedData()
     source1 = cache.get_source_by_url(rss_url)
@@ -224,14 +223,14 @@ def test_main_ideal(
     # Note: this is just a shallow check, but it's better than nothing.
     assert len(fixture_http_server.requests) == 2
 
-    req0 = fixture_http_server.captured_requests[0]
-    assert req0[0] == "POST"
-    data = json.loads(req0[1])
+    req0 = fixture_http_server.requests[0]
+    assert req0.method == "POST"
+    data = req0.get_json()
     assert data == expected_slack_requests[0]
 
-    req1 = fixture_http_server.captured_requests[1]
-    assert req1[0] == "POST"
-    data = json.loads(req1[1])
+    req1 = fixture_http_server.requests[1]
+    assert req1.method == "POST"
+    data = req1.get_json()
     assert data == expected_slack_requests[1]
 
 
@@ -262,7 +261,6 @@ def test_main_cache_hit(
         500,
         {"Content-Type": "application/json"},
     )
-    fixture_http_server.capture_requests = True
 
     cache = CachedData()
     source1 = cache.get_source_by_url(rss_url)
