@@ -16,8 +16,7 @@ else
     exit 1
 fi
 
-python3 \
-    -m black \
-    ${black_arg} \
-    -l 80 \
-    `find . ! -path '*/\.*' -name '*.py'`
+
+# shellcheck disable=SC2086
+find . ! -path '*/\.*' -name '*.py' -print0 | \
+    xargs -0 -- python3 -m black ${black_arg} -l 80
