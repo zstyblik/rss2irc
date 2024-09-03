@@ -258,7 +258,7 @@ def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
 
 def signal_handler(signum, frame):
     """Handle SIGALRM signal."""
-    raise ValueError
+    raise TimeoutError
 
 
 def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
@@ -308,13 +308,16 @@ def write_data(
     sleep: int = 2,
 ) -> None:
     """Write data into file."""
+    signal.signal(signal.SIGALRM, signal_handler)
+    signal.alarm(config_options.PIPE_OPEN_TIMEOUT)
     with open(output, "wb") as fhandle:
+        signal.alarm(0)
         for url in list(data.keys()):
             message = format_message(url, data[url], handle)
             try:
                 write_message(logger, fhandle, message)
                 time.sleep(sleep)
-            except ValueError:
+            except (TimeoutError, ValueError):
                 logger.debug("%s", traceback.format_exc())
                 logger.debug("Failed to write %s, %s", url, data[url])
                 data.pop(url)
@@ -325,10 +328,10 @@ def write_message(
 ) -> None:
     """Write message into file handle.
 
-    Sets up SIGALRM and raises `ValueError` if alarm is due.
+    Sets up SIGALRM and raises `TimeoutError` if alarm is due.
     """
     signal.signal(signal.SIGALRM, signal_handler)
-    signal.alarm(5)
+    signal.alarm(config_options.PIPE_WRITE_TIMEOUT)
     try:
         fhandle_stat = os.fstat(fhandle.fileno())
         is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
