@@ -7,3 +7,5 @@ workarounds are needed what so ever.
 CACHE_EXPIRATION = 86400  # seconds
 DATA_SOURCE_EXPIRATION = 30 * 86400  # seconds
 HTTP_TIMEOUT = 30  # seconds
+PIPE_OPEN_TIMEOUT = 60  # seconds
+PIPE_WRITE_TIMEOUT = 5  # seconds
