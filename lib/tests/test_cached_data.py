@@ -27,6 +27,21 @@ def test_cache_get_source_by_url(mock_time):
     assert result.last_used_ts == 1717428213
 
 
+@patch("lib.cached_data.time.time")
+def test_cache_get_source_by_url_create_source(mock_time):
+    """Test that CachedData.get_source_by_url() creates new source."""
+    mock_time.return_value = 1717428214
+    url = "http://example.com"
+    expected_source = HTTPSource(
+        last_used_ts=1717428214,
+        url=url,
+    )
+    cache = CachedData()
+    result = cache.get_source_by_url(url)
+    assert result == expected_source
+    assert result.last_used_ts == 1717428214
+
+
 def test_cache_scrub_data_sources_empty(cache):
     """Test that CachedData.scrub_data_sources() when there are no sources."""
     cache = CachedData()
