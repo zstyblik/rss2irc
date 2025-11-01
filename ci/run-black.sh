@@ -16,6 +16,7 @@ else
     exit 1
 fi
 
+cd "$(dirname "${0}")/.."
 
 # shellcheck disable=SC2086
 find . ! -path '*/\.*' -name '*.py' -print0 | \
