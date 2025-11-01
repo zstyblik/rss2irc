@@ -5,11 +5,11 @@ set -u
 
 MODE=${1:?Mode must be given.}
 
-if [ "${MODE}" == "check" ]; then
+if [ "${MODE}" = "check" ]; then
     black_arg=" --check"
-elif [ "${MODE}" == "diff" ]; then
+elif [ "${MODE}" = "diff" ]; then
     black_arg=" --diff"
-elif [ "${MODE}" == "format" ]; then
+elif [ "${MODE}" = "format" ]; then
     black_arg=""
 else
     printf "Mode '%s' is not supported.\n" "${MODE}" 1>&2
