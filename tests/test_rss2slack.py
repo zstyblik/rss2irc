@@ -9,10 +9,11 @@ from unittest.mock import patch
 
 import pytest
 
-import rss2irc  # noqa: I100, I202
-import rss2slack  # noqa: I100, I202
-from lib import CachedData  # noqa: I100, I202
-from lib import config_options  # noqa: I100, I202
+import rss2irc
+import rss2slack
+from lib import CachedData
+from lib import config_options
+from lib.exceptions import SlackTokenError
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -77,11 +78,11 @@ def test_get_slack_token_no_token():
     exception = None
     try:
         rss2slack.get_slack_token()
-    except ValueError as value_error:
+    except SlackTokenError as value_error:
         exception = value_error
 
-    assert isinstance(exception, ValueError) is True
-    assert exception.args[0] == "SLACK_TOKEN must be set."
+    assert isinstance(exception, SlackTokenError) is True
+    assert exception.args[0] == "SLACK_TOKEN env variable must be set"
 
 
 def test_main_ideal(

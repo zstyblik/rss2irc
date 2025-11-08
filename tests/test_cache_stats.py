@@ -6,9 +6,9 @@ import sys
 import time
 from unittest.mock import patch
 
-import cache_stats  # noqa: I202
-import rss2irc  # noqa: I202
-from lib import CachedData  # noqa: I202
+import cache_stats
+import rss2irc
+from lib import CachedData
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 

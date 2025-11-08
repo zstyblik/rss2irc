@@ -9,10 +9,10 @@ from unittest.mock import patch
 
 import pytest
 
-import phpbb2slack  # noqa: I100, I202
-import rss2irc  # noqa: I100, I202
-from lib import CachedData  # noqa: I100, I202
-from lib import config_options  # noqa: I100, I202
+import phpbb2slack
+import rss2irc
+from lib import CachedData
+from lib import config_options
 
 ITEM_EXPIRATION = int(time.time())
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))

@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 import pytest
 
-import gh2slack  # noqa: I100, I202
-import rss2irc  # noqa: I100, I202
-from lib import CachedData  # noqa: I100, I202
+import gh2slack
+import rss2irc
+from lib import CachedData
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -22,7 +22,8 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 class MockedResponse:
     """Mocked `requests.Response`."""
 
-    def __init__(self, response, headers=None):  # noqa: D107
+    def __init__(self, response, headers=None):
+        """Init."""
         self.response = response
         if headers:
             self.headers = headers
