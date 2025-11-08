@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-import git_commits2slack  # noqa:I100,I202
+import git_commits2slack
 
 
 @pytest.fixture

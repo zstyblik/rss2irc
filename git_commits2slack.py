@@ -12,12 +12,13 @@ import os
 import re
 import subprocess
 import sys
-import traceback
 from typing import Dict
 from typing import List
 
 import rss2slack
 from lib import config_options
+from lib import utils
+from lib.exceptions import SlackTokenError
 
 RE_GIT_AUTD = re.compile(r"^Already up-to-date.$")
 RE_GIT_UPDATING = re.compile(r"^Updating [a-z0-9]+", re.I)
@@ -156,12 +157,12 @@ def git_show(git_clone_dir: str, git_ref: str) -> List[str]:
 
 def main():
     """Post new commits in given repository to Slack."""
+    args = parse_args()
     logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
     logger = logging.getLogger("git-commits2slack")
-    args = parse_args()
-    if args.verbosity:
-        logger.setLevel(logging.DEBUG)
+    logger.setLevel(args.log_level)
 
+    retcode = 0
     try:
         slack_token = rss2slack.get_slack_token()
 
@@ -176,7 +177,6 @@ def main():
 
         commits = git_show(args.git_clone_dir, commit_ref)
         if not commits:
-            # FIXME(zstyblik): error? send message to Slack?
             logger.warning("There should be new commits, but we have none.")
             sys.exit(0)
 
@@ -203,13 +203,15 @@ def main():
             slack_client,
             args.slack_channel,
         )
+    except SlackTokenError:
+        logger.exception("Environment variable SLACK_TOKEN must be set.")
+        retcode = 1
     except Exception:
-        logger.debug("%s", traceback.format_exc())
-        # TODO(zstyblik):
-        # 1. touch error file
-        # 2. send error message to the channel
-    finally:
-        sys.exit(0)
+        logger.exception("Unexpected exception has occurred.")
+        retcode = 1
+
+    retcode = utils.mask_retcode(retcode, args.mask_errors)
+    sys.exit(retcode)
 
 
 def parse_args() -> argparse.Namespace:
@@ -237,6 +239,16 @@ def parse_args() -> argparse.Namespace:
         help="git web interface, resp. base URL, for given repository.",
     )
     parser.add_argument(
+        "--return-error",
+        dest="mask_errors",
+        action="store_false",
+        default=True,
+        help=(
+            "Return RC > 0 should error occur. "
+            "Majority of errors are masked because of cron."
+        ),
+    )
+    parser.add_argument(
         "--slack-base-url",
         dest="slack_base_url",
         type=str,
@@ -255,9 +267,7 @@ def parse_args() -> argparse.Namespace:
         dest="slack_timeout",
         type=int,
         default=config_options.HTTP_TIMEOUT,
-        help="Slack API Timeout. Defaults to {:d} seconds.".format(
-            config_options.HTTP_TIMEOUT
-        ),
+        help="Slack API Timeout. Defaults to %(default)s seconds.",
     )
     parser.add_argument(
         "--sleep",
@@ -272,12 +282,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-v",
         "--verbose",
-        dest="verbosity",
-        action="store_true",
-        default=False,
-        help="Increase logging verbosity.",
+        action="count",
+        default=0,
+        help="Increase log level verbosity. Can be passed multiple times.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    args.log_level = utils.calc_log_level(args.verbose)
+
+    return args
 
 
 def parse_commits(output: str) -> List[str]:

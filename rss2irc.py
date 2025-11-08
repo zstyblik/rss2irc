@@ -19,8 +19,14 @@ from typing import Tuple
 import feedparser
 import requests
 
-from lib import CachedData  # noqa: I202
-from lib import config_options  # noqa: I202
+from lib import CachedData
+from lib import config_options
+from lib import utils
+from lib.exceptions import CacheReadError
+from lib.exceptions import CacheWriteError
+from lib.exceptions import EmptyResponseError
+from lib.exceptions import NoNewsError
+from lib.exceptions import NotModifiedError
 
 
 def format_message(
@@ -49,7 +55,12 @@ def get_rss(
     timeout: int = config_options.HTTP_TIMEOUT,
     extra_headers: Dict = None,
 ) -> requests.models.Response:
-    """Return body of given URL as a string."""
+    """Return body of given URL as a string.
+
+    :raises EmptyResponseError: raised when HTTP rsp body is empty
+    :raises NotModifiedError: raised when HTTP Status Code is 304
+    :raises requests.exceptions.BaseHTTPError: raised when HTTP error occurs
+    """
     # Randomize user agent, because CF likes to block for no apparent reason.
     user_agent = "rss2irc_{:d}".format(int(time.time()))
     headers = {"User-Agent": user_agent}
@@ -57,31 +68,35 @@ def get_rss(
         for key, value in extra_headers.items():
             headers[key] = value
 
-    logger.debug("Get %s", url)
+    logger.debug("Make request at URL '%s'.", url)
     rsp = requests.get(url, timeout=timeout, headers=headers)
-    logger.debug("Got HTTP Status Code: %i", rsp.status_code)
+    logger.debug("Got HTTP Status Code '%i'.", rsp.status_code)
     rsp.raise_for_status()
+
+    if rsp.status_code == 304:
+        raise NotModifiedError
+
+    if not rsp.text:
+        raise EmptyResponseError
+
     return rsp
 
 
 def main():
     """Fetch RSS feed and post RSS news to IRC."""
-    logging.basicConfig(stream=sys.stdout)
-    logger = logging.getLogger("rss2irc")
     args = parse_args()
-    if args.verbosity:
-        logger.setLevel(logging.DEBUG)
-
-    if args.cache_expiration < 0:
-        logger.error("Cache expiration can't be less than 0.")
-        sys.exit(1)
+    logging.basicConfig(level=args.log_level, stream=sys.stdout)
+    logger = logging.getLogger("rss2irc")
+    logger.setLevel(args.log_level)
 
     if not os.path.exists(args.output):
         logger.error("Ouput '%s' doesn't exist.", args.output)
         sys.exit(1)
 
+    cache = None
+    retcode = 0
     try:
-        cache = read_cache(logger, args.cache)
+        cache = read_cache(logger, args.cache_file)
         source = cache.get_source_by_url(args.rss_url)
 
         rsp = get_rss(
@@ -90,20 +105,10 @@ def main():
             args.rss_http_timeout,
             source.make_caching_headers(),
         )
-        if rsp.status_code == 304:
-            logger.debug("No new RSS data since the last run")
-            write_cache(cache, args.cache)
-            sys.exit(0)
-
-        if not rsp.text:
-            logger.error("Failed to get RSS from %s", args.rss_url)
-            sys.exit(1)
 
         news = parse_news(rsp.text)
         if not news:
-            logger.info("No news?")
-            write_cache(cache, args.cache)
-            sys.exit(0)
+            raise NoNewsError
 
         source.extract_caching_headers(rsp.headers)
         prune_news(logger, cache, news, args.cache_expiration)
@@ -114,42 +119,80 @@ def main():
 
         update_items_expiration(cache, news, args.cache_expiration)
         cache.scrub_data_sources()
-        write_cache(cache, args.cache)
-        # TODO(zstyblik): remove error file
+        source.http_error_count = 0
+        retcode = 0
+    except CacheReadError:
+        logger.exception(
+            "Error while reading cache file '%s'.",
+            args.cache_file,
+        )
+        retcode = utils.mask_retcode(1, args.mask_error)
+        # NOTE(zstyblik): since cache file couldn't be opened, it doesn't make
+        # sense writing it. Therefore, call sys.exit().
+        sys.exit(retcode)
+    except NotModifiedError:
+        logger.debug("No new RSS data since the last run.")
+        update_items_expiration(cache, cache.items, args.cache_expiration)
+        source.http_error_count = 0
+        retcode = 0
+    except EmptyResponseError:
+        logger.error("Got empty response from '%s'.", args.rss_url)
+        source.http_error_count += 1
+        retcode = 1
+    except NoNewsError:
+        # NOTE(zstyblik): some feeds don't have news unless something is up, eg.
+        # AWS RSS feed doesn't have news unless there is a problem.
+        logger.info("No news from '%s'?", args.rss_url)
+        update_items_expiration(cache, cache.items, args.cache_expiration)
+        # source.http_error_count leave unchanged
+        retcode = 0
     except Exception:
-        logger.debug("%s", traceback.format_exc())
-        # TODO(zstyblik):
-        # 1. touch error file
-        # 2. send error message to the channel
-    finally:
-        sys.exit(0)
+        logger.exception("Unexpected exception has occurred.")
+        source.http_error_count += 1
+        retcode = 1
+
+    # FIXME: put try-except into function/wrapper and just return RC? :\
+    try:
+        write_cache(cache, args.cache_file)
+    except CacheWriteError:
+        logger.exception(
+            "Failed to write data into cache file '%s'.",
+            args.cache_file,
+        )
+        retcode = 1
+
+    retcode = utils.mask_retcode(retcode, args.mask_errors)
+    sys.exit(retcode)
 
 
 def parse_args() -> argparse.Namespace:
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="verbosity",
+        "--cache",
+        dest="cache_file",
+        type=str,
+        default=None,
+        help="File which contains cache.",
+    )
+    parser.add_argument(
+        "--cache-expiration",
+        dest="cache_expiration",
+        type=int,
+        default=config_options.CACHE_EXPIRATION,
+        help=(
+            "How long to keep items in cache. "
+            "Defaults to %(default)s seconds."
+        ),
+    )
+    parser.add_argument(
+        "--cache-init",
+        dest="cache_init",
         action="store_true",
         default=False,
-        help="Increase logging verbosity.",
-    )
-    parser.add_argument(
-        "--rss-url",
-        dest="rss_url",
-        type=str,
-        required=True,
-        help="URL of RSS Feed.",
-    )
-    parser.add_argument(
-        "--rss-http-timeout",
-        dest="rss_http_timeout",
-        type=int,
-        default=config_options.HTTP_TIMEOUT,
-        help="HTTP Timeout. Defaults to {:d} seconds.".format(
-            config_options.HTTP_TIMEOUT
+        help=(
+            "Prevents posting news to IRC. This is useful "
+            "when bootstrapping new RSS feed."
         ),
     )
     parser.add_argument(
@@ -167,28 +210,28 @@ def parse_args() -> argparse.Namespace:
         help="Where to output formatted news.",
     )
     parser.add_argument(
-        "--cache",
-        dest="cache",
-        type=str,
-        default=None,
-        help="File which contains cache.",
-    )
-    parser.add_argument(
-        "--cache-expiration",
-        dest="cache_expiration",
-        type=int,
-        default=config_options.CACHE_EXPIRATION,
-        help="Time, in seconds, for how long to keep items in cache.",
-    )
-    parser.add_argument(
-        "--cache-init",
-        dest="cache_init",
-        action="store_true",
-        default=False,
+        "--return-error",
+        dest="mask_errors",
+        action="store_false",
+        default=True,
         help=(
-            "Prevents posting news to IRC. This is useful "
-            "when bootstrapping new RSS feed."
+            "Return RC > 0 should error occur. "
+            "Majority of errors are masked because of cron."
         ),
+    )
+    parser.add_argument(
+        "--rss-url",
+        dest="rss_url",
+        type=str,
+        required=True,
+        help="URL of RSS Feed.",
+    )
+    parser.add_argument(
+        "--rss-http-timeout",
+        dest="rss_http_timeout",
+        type=int,
+        default=config_options.HTTP_TIMEOUT,
+        help="HTTP Timeout. Defaults to %(default)s seconds.",
     )
     parser.add_argument(
         "--sleep",
@@ -197,7 +240,23 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Sleep between messages in order to avoid Excess Flood at IRC.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase log level verbosity. Can be passed multiple times.",
+    )
+    args = parser.parse_args()
+    args.log_level = utils.calc_log_level(args.verbose)
+
+    if args.cache_expiration < 0:
+        parser.error("Cache expiration cannot be less than 0.")
+
+    if args.sleep < 0:
+        parser.error("Sleep interval cannot be less than 0.")
+
+    return args
 
 
 def parse_news(data: str) -> Dict[str, Tuple[str, str]]:
@@ -233,7 +292,10 @@ def prune_news(
 
 
 def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
-    """Read file with Py pickle in it."""
+    """Read file with Py pickle in it.
+
+    :raises CacheReadError: raised when unhandled exception occurs
+    """
     if not cache_file:
         return CachedData()
 
@@ -244,21 +306,18 @@ def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
         cache = CachedData()
         logger.warning("Cache file '%s' doesn't exist.", cache_file)
     except EOFError:
-        # Note: occurred with empty file.
+        # NOTE(zstyblik): occurred with empty file.
         cache = CachedData()
         logger.debug(
             "Cache file '%s' is probably empty: %s",
             cache_file,
             traceback.format_exc(),
         )
+    except Exception as exception:
+        raise CacheReadError from exception
 
     logger.debug("%s", cache)
     return cache
-
-
-def signal_handler(signum, frame):
-    """Handle SIGALRM signal."""
-    raise TimeoutError
 
 
 def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
@@ -268,8 +327,7 @@ def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
         try:
             expiration = int(cache.items[key])
         except ValueError:
-            logger.error("%s", traceback.format_exc())
-            logger.error(
+            logger.exception(
                 "Invalid cache entry will be removed: '%s'", cache.items[key]
             )
             cache.items.pop(key)
@@ -278,6 +336,11 @@ def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
         if expiration < time_now:
             logger.debug("URL %s has expired.", key)
             cache.items.pop(key)
+
+
+def signal_handler(signum, frame):
+    """Handle SIGALRM signal."""
+    raise TimeoutError
 
 
 def update_items_expiration(
@@ -291,13 +354,19 @@ def update_items_expiration(
         cache.items[key] = item_expiration
 
 
-def write_cache(data: CachedData, cache_file: str) -> None:
-    """Dump data into file as a pickle."""
-    if not cache_file:
+def write_cache(data: CachedData, cache_file: str):
+    """Dump data into file as a pickle.
+
+    :raises CacheWriteError: raised when unhandled exception occurs
+    """
+    if not cache_file or data is None:
         return
 
-    with open(cache_file, "wb") as fhandle:
-        pickle.dump(data, fhandle, pickle.HIGHEST_PROTOCOL)
+    try:
+        with open(cache_file, "wb") as fhandle:
+            pickle.dump(data, fhandle, pickle.HIGHEST_PROTOCOL)
+    except Exception as exception:
+        raise CacheWriteError from exception
 
 
 def write_data(
@@ -318,8 +387,12 @@ def write_data(
                 write_message(logger, fhandle, message)
                 time.sleep(sleep)
             except (TimeoutError, ValueError):
-                logger.debug("%s", traceback.format_exc())
-                logger.debug("Failed to write %s, %s", url, data[url])
+                logger.debug(
+                    "Failed to write '%s'=>'%s' due to exception: %s",
+                    url,
+                    data[url],
+                    traceback.format_exc(),
+                )
                 data.pop(url)
 
 

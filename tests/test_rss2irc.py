@@ -9,13 +9,16 @@ from unittest.mock import patch
 
 import pytest
 
-import rss2irc  # noqa: I202
-from lib import CachedData  # noqa: I202
-from lib import config_options  # noqa: I202
+import rss2irc
+from lib import CachedData
+from lib import config_options
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
+# NOTE: these are newly added fixmes, therefore fixme!
+# FIXME: test return error arg?
+# FIXME: I guess test the newly added code(paths)?
 @pytest.mark.parametrize(
     "url,msg_attrs,handle,expected",
     [
