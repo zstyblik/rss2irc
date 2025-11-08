@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-import git_commits2slack  # noqa:I100,I202
+import git_commits2slack
+from lib.exceptions import SlackTokenError
 
 
 @pytest.fixture
@@ -387,3 +388,117 @@ def test_main_ideal(
     assert req0.method == "POST"
     data = req0.get_json()
     assert data == expected_slack_requests[0]
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("git_commits2slack.rss2slack.get_slack_token")
+def test_main_slack_token_error(
+    mock_get_slack_token,
+    extra_args,
+    expected_retcode,
+    fixture_git_dir,
+    caplog,
+):
+    """Test that SlackTokenError is handled as expected."""
+    expected_log_records = [
+        (
+            "git-commits2slack",
+            40,
+            "Environment variable SLACK_TOKEN must be set.",
+        ),
+    ]
+    expected_slack_channel = "test"
+    expected_slack_url = "https://slack.example.com"
+
+    mock_get_slack_token.side_effect = SlackTokenError("pytest")
+
+    exception = None
+    args = [
+        "./git_commits2slack.py",
+        "--git-clone-dir",
+        fixture_git_dir,
+        "--git-repository",
+        "test",
+        "--git-web",
+        "http://example.com",
+        "--slack-base-url",
+        expected_slack_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-v",
+    ] + extra_args
+
+    with patch.object(sys, "argv", args):
+        try:
+            git_commits2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    assert caplog.record_tuples == expected_log_records
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("git_commits2slack.rss2slack.get_slack_token")
+def test_main_random_exception(
+    mock_get_slack_token,
+    extra_args,
+    expected_retcode,
+    fixture_git_dir,
+    caplog,
+):
+    """Test that unexpected exception is handled as expected."""
+    expected_log_records = [
+        (
+            "git-commits2slack",
+            40,
+            "Unexpected exception has occurred.",
+        ),
+    ]
+    expected_slack_channel = "test"
+    expected_slack_url = "https://slack.example.com"
+
+    mock_get_slack_token.side_effect = ValueError("pytest")
+
+    exception = None
+    args = [
+        "./git_commits2slack.py",
+        "--git-clone-dir",
+        fixture_git_dir,
+        "--git-repository",
+        "test",
+        "--git-web",
+        "http://example.com",
+        "--slack-base-url",
+        expected_slack_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-v",
+    ] + extra_args
+
+    with patch.object(sys, "argv", args):
+        try:
+            git_commits2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    assert caplog.record_tuples == expected_log_records

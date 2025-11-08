@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 import rss2irc
 from lib import CachedData
+from lib import utils
 
 BUCKET_COUNT = 10
 
@@ -57,7 +58,9 @@ def calc_distribution(
 def get_timestamp(data) -> int:
     """Convert input data to int.
 
-    :raises: KeyError, TypeError, ValueError
+    :raises KeyError: raised when expected key is not found in data
+    :raises TypeError: raised for unsupported data types
+    :raises ValueError: raised when conversion of value to int fails
     """
     if isinstance(data, (int, float)):
         return int(data)
@@ -85,11 +88,8 @@ def get_timestamp_minmax(
             logger.debug("%s", traceback.format_exc())
             continue
 
-        if timestamp < ts_min:
-            ts_min = timestamp
-
-        if timestamp > ts_max:
-            ts_max = timestamp
+        ts_min = min(ts_min, timestamp)
+        ts_max = max(ts_max, timestamp)
 
     return ts_min, ts_max, error_cnt
 
@@ -119,15 +119,16 @@ def generate_buckets(
 
 def main():
     """Read cache file and print-out stats."""
+    args = parse_args()
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     logger = logging.getLogger("cache_stats")
-    args = parse_args()
-    if args.verbosity:
-        logger.setLevel(logging.DEBUG)
+    logger.setLevel(args.log_level)
 
-    cache = rss2irc.read_cache(logger, args.cache)
+    cache = rss2irc.read_cache(logger, args.cache_file)
     logger.info(
-        "Number of items in cache '%s' is %d.", args.cache, len(cache.items)
+        "Number of items in cache '%s' is %d.",
+        args.cache_file,
+        len(cache.items),
     )
     if not cache.items:
         logger.info("Nothing to do.")
@@ -169,22 +170,24 @@ def parse_args() -> argparse.Namespace:
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="verbosity",
-        action="store_true",
-        default=False,
-        help="Increase logging verbosity.",
-    )
-    parser.add_argument(
         "--cache",
-        dest="cache",
+        dest="cache_file",
         type=str,
         default=None,
         required=True,
         help="File which contains cache.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase log level verbosity. Can be passed multiple times.",
+    )
+    args = parser.parse_args()
+    args.log_level = utils.calc_log_level(args.verbose)
+
+    return args
 
 
 if __name__ == "__main__":

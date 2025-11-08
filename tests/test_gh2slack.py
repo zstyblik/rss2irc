@@ -12,9 +12,11 @@ from unittest.mock import patch
 
 import pytest
 
-import gh2slack  # noqa: I100, I202
-import rss2irc  # noqa: I100, I202
-from lib import CachedData  # noqa: I100, I202
+import gh2slack
+import rss2irc
+from lib import CachedData
+from lib.exceptions import CacheReadError
+from lib.exceptions import SlackTokenError
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -22,7 +24,8 @@ SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 class MockedResponse:
     """Mocked `requests.Response`."""
 
-    def __init__(self, response, headers=None):  # noqa: D107
+    def __init__(self, response, headers=None):
+        """Init."""
         self.response = response
         if headers:
             self.headers = headers
@@ -339,6 +342,317 @@ def test_main_ideal(
     assert req1.method == "POST"
     data = req1.get_json()
     assert data in expected_slack_requests
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("gh2slack.rss2irc.wrap_write_cache")
+@patch("gh2slack.rss2irc.read_cache")
+def test_main_cache_read_error(
+    mock_read_cache,
+    mock_wrap_write_cache,
+    extra_args,
+    expected_retcode,
+    caplog,
+):
+    """Test that CacheReadError is handled as expected."""
+    expected_log_records = [
+        (
+            "gh2slack",
+            40,
+            "Error while reading cache file '/path/does/not/exist'.",
+        ),
+    ]
+    expected_slack_channel = "test"
+    fixture_cache_file = "/path/does/not/exist"
+    gh_repo = "test-repo"
+    gh_owner = "test-user"
+    gh_section = "pulls"
+    slack_base_url = "https://slack.example.com"
+
+    mock_read_cache.side_effect = CacheReadError("pytest")
+    #
+    exception = None
+    args = [
+        "./gh2slack.py",
+        "--cache",
+        fixture_cache_file,
+        "--gh-owner",
+        gh_owner,
+        "--gh-repo",
+        gh_repo,
+        "--gh-section",
+        gh_section,
+        "--slack-base-url",
+        slack_base_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-v",
+    ] + extra_args
+
+    print("Slack URL: {:s}".format(slack_base_url))
+    print("Cache file: {:s}".format(fixture_cache_file))
+
+    with patch.object(sys, "argv", args):
+        try:
+            gh2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    mock_read_cache.assert_called_once()
+    mock_wrap_write_cache.assert_not_called()
+    assert caplog.record_tuples == expected_log_records
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("gh2slack.rss2irc.wrap_write_cache")
+@patch("gh2slack.rss2slack.get_slack_token")
+@patch("gh2slack.rss2irc.read_cache")
+def test_main_slack_token_error(
+    mock_read_cache,
+    mock_get_slack_token,
+    mock_wrap_write_cache,
+    extra_args,
+    expected_retcode,
+    caplog,
+):
+    """Test that SlackTokenError is handled as expected."""
+    expected_log_records = [
+        (
+            "gh2slack",
+            40,
+            "Environment variable SLACK_TOKEN must be set.",
+        ),
+    ]
+    expected_slack_channel = "test"
+    fixture_cache_file = "/path/does/not/exist"
+    gh_repo = "test-repo"
+    gh_owner = "test-user"
+    gh_section = "pulls"
+    slack_base_url = "https://slack.example.com"
+
+    mock_read_cache.return_value = CachedData()
+    mock_get_slack_token.side_effect = SlackTokenError("pytest")
+    #
+    exception = None
+    args = [
+        "./gh2slack.py",
+        "--cache",
+        fixture_cache_file,
+        "--gh-owner",
+        gh_owner,
+        "--gh-repo",
+        gh_repo,
+        "--gh-section",
+        gh_section,
+        "--slack-base-url",
+        slack_base_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-v",
+    ] + extra_args
+
+    print("Slack URL: {:s}".format(slack_base_url))
+    print("Cache file: {:s}".format(fixture_cache_file))
+
+    with patch.object(sys, "argv", args):
+        try:
+            gh2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    mock_read_cache.assert_called_once()
+    mock_get_slack_token.assert_called_once()
+    mock_wrap_write_cache.assert_not_called()
+    assert caplog.record_tuples == expected_log_records
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("gh2slack.rss2irc.wrap_write_cache")
+@patch("gh2slack.rss2slack.get_slack_token")
+@patch("gh2slack.rss2irc.read_cache")
+def test_main_random_exception(
+    mock_read_cache,
+    mock_get_slack_token,
+    mock_wrap_write_cache,
+    extra_args,
+    expected_retcode,
+    caplog,
+):
+    """Test that unexpected exception is handled correctly."""
+    expected_log_records = [
+        (
+            "gh2slack",
+            40,
+            "Unexpected exception has occurred.",
+        ),
+    ]
+    expected_slack_channel = "test"
+    fixture_cache_file = "/path/does/not/exist"
+    gh_repo = "test-repo"
+    gh_owner = "test-user"
+    gh_section = "pulls"
+    slack_base_url = "https://slack.example.com"
+
+    mock_read_cache.return_value = CachedData()
+    mock_get_slack_token.side_effect = ValueError("pytest")
+    mock_wrap_write_cache.return_value = 0
+    #
+    exception = None
+    args = [
+        "./gh2slack.py",
+        "--cache",
+        fixture_cache_file,
+        "--gh-owner",
+        gh_owner,
+        "--gh-repo",
+        gh_repo,
+        "--gh-section",
+        gh_section,
+        "--slack-base-url",
+        slack_base_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-v",
+    ] + extra_args
+
+    print("Slack URL: {:s}".format(slack_base_url))
+    print("Cache file: {:s}".format(fixture_cache_file))
+
+    with patch.object(sys, "argv", args):
+        try:
+            gh2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    mock_read_cache.assert_called_once()
+    mock_get_slack_token.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
+    assert caplog.record_tuples == expected_log_records
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("gh2slack.rss2irc.wrap_write_cache")
+@patch("gh2slack.rss2irc.read_cache")
+def test_main_wrap_write_cache_error(
+    mock_read_cache,
+    mock_wrap_write_cache,
+    extra_args,
+    expected_retcode,
+    monkeypatch,
+    fixture_mock_requests,
+    caplog,
+):
+    """Test that error in wrap_write_cache is handled as expected."""
+    expected_log_records = []
+    expected_slack_channel = "test"
+    expected_cache_keys = [
+        "http://example.com/foo",
+        "http://example.com/bar",
+    ]
+    fixture_cache_file = "/path/does/not/exist"
+    gh_repo = "test-repo"
+    gh_owner = "test-user"
+    gh_section = "pulls"
+    gh_url = gh2slack.get_gh_api_url(gh_owner, gh_repo, gh_section)
+    slack_base_url = "https://slack.example.com"
+
+    cache = CachedData()
+    mock_read_cache.return_value = cache
+    # Mock/set SLACK_TOKEN
+    monkeypatch.setenv("SLACK_TOKEN", "test")
+    # Mock HTTP RSS
+    pages = [
+        {
+            "html_url": "http://example.com/foo",
+            "number": 0,
+            "title": "some title#1",
+        },
+        {
+            "html_url": "http://example.com/bar",
+            "number": 1,
+            "title": "some title#2",
+        },
+    ]
+    mock_http_rss = fixture_mock_requests.get(gh_url, text=json.dumps(pages))
+    mock_wrap_write_cache.return_value = 1
+    #
+    exception = None
+    args = [
+        "./gh2slack.py",
+        "--cache",
+        fixture_cache_file,
+        "--cache-init",
+        "--gh-owner",
+        gh_owner,
+        "--gh-repo",
+        gh_repo,
+        "--gh-section",
+        gh_section,
+        "--slack-base-url",
+        slack_base_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-v",
+    ] + extra_args
+
+    print("Slack URL: {:s}".format(slack_base_url))
+    print("Cache file: {:s}".format(fixture_cache_file))
+
+    with patch.object(sys, "argv", args):
+        try:
+            gh2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    mock_read_cache.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
+    # Check HTTP RSS mock
+    assert mock_http_rss.called is True
+    assert mock_http_rss.call_count == 1
+    assert mock_http_rss.last_request.text is None
+
+    assert caplog.record_tuples == expected_log_records
+    assert list(cache.items.keys()) == expected_cache_keys
 
 
 def test_process_page_items():
