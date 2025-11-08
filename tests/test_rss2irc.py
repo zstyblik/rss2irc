@@ -16,6 +16,11 @@ from lib import config_options  # noqa: I202
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
+# FIXME: test_mask_retcode()
+# FIXME: test_send_error_notification()
+# FIXME: test_should_notify()
+# FIXME: test return error arg?
+# FIXME: I guess test the newly added code(paths)?
 @pytest.mark.parametrize(
     "url,msg_attrs,handle,expected",
     [

@@ -21,6 +21,18 @@ import requests
 
 from lib import CachedData  # noqa: I202
 from lib import config_options  # noqa: I202
+from lib.exceptions import CacheReadError  # noqa: I202
+from lib.exceptions import CacheWriteError  # noqa: I202
+from lib.exceptions import EmptyResponseError  # noqa: I202
+from lib.exceptions import NoNewsError  # noqa: I202
+from lib.exceptions import NotModifiedError  # noqa: I202
+
+
+def calc_log_level(count: int) -> int:
+    """Return logging log level as int based on count."""
+    log_level = 40 - max(count, 0) * 10
+    log_level = max(log_level, 10)
+    return log_level
 
 
 def format_message(
@@ -57,31 +69,33 @@ def get_rss(
         for key, value in extra_headers.items():
             headers[key] = value
 
-    logger.debug("Get %s", url)
+    logger.debug("Make request at URL '%s'.", url)
     rsp = requests.get(url, timeout=timeout, headers=headers)
-    logger.debug("Got HTTP Status Code: %i", rsp.status_code)
+    logger.debug("Got HTTP Status Code '%i'.", rsp.status_code)
     rsp.raise_for_status()
+
+    if rsp.status_code == 304:
+        raise NotModifiedError
+
+    if not rsp.text:
+        raise EmptyResponseError
+
     return rsp
 
 
 def main():
     """Fetch RSS feed and post RSS news to IRC."""
-    logging.basicConfig(stream=sys.stdout)
-    logger = logging.getLogger("rss2irc")
     args = parse_args()
-    if args.verbosity:
-        logger.setLevel(logging.DEBUG)
-
-    if args.cache_expiration < 0:
-        logger.error("Cache expiration can't be less than 0.")
-        sys.exit(1)
+    logging.basicConfig(level=args.log_level, stream=sys.stdout)
+    logger = logging.getLogger("rss2irc")
 
     if not os.path.exists(args.output):
         logger.error("Ouput '%s' doesn't exist.", args.output)
         sys.exit(1)
 
+    retcode = 0
     try:
-        cache = read_cache(logger, args.cache)
+        cache = read_cache(logger, args.cache_file)
         source = cache.get_source_by_url(args.rss_url)
 
         rsp = get_rss(
@@ -90,20 +104,10 @@ def main():
             args.rss_http_timeout,
             source.make_caching_headers(),
         )
-        if rsp.status_code == 304:
-            logger.debug("No new RSS data since the last run")
-            write_cache(cache, args.cache)
-            sys.exit(0)
-
-        if not rsp.text:
-            logger.error("Failed to get RSS from %s", args.rss_url)
-            sys.exit(1)
 
         news = parse_news(rsp.text)
         if not news:
-            logger.info("No news?")
-            write_cache(cache, args.cache)
-            sys.exit(0)
+            raise NoNewsError
 
         source.extract_caching_headers(rsp.headers)
         prune_news(logger, cache, news, args.cache_expiration)
@@ -114,15 +118,67 @@ def main():
 
         update_items_expiration(cache, news, args.cache_expiration)
         cache.scrub_data_sources()
-        write_cache(cache, args.cache)
-        # TODO(zstyblik): remove error file
+        source.http_error_count = 0
+        retcode = 0
+    except CacheReadError:
+        logger.exception(
+            "Error while reading cache file '%s'.",
+            args.cache_file,
+        )
+        retcode = mask_retcode(1, args.mask_error)
+        # NOTE(zstyblik): since cache file couldn't be opened, it doesn't make
+        # sense writing it. Therefore, call sys.exit().
+        sys.exit(retcode)
+    except NotModifiedError:
+        logger.debug("No new RSS data since the last run.")
+        update_items_expiration(cache, cache.items, args.cache_expiration)
+        source.http_error_count = 0
+        retcode = 0
+    except EmptyResponseError:
+        logger.error("Got empty response from '%s'.", args.rss_url)
+        source.http_error_count += 1
+        retcode = 1
+    except NoNewsError:
+        logger.info("No news from '%s'?", args.rss_url)
+        update_items_expiration(cache, cache.items, args.cache_expiration)
+        # source.http_error_count leave unchanged
+        retcode = 0
     except Exception:
-        logger.debug("%s", traceback.format_exc())
-        # TODO(zstyblik):
-        # 1. touch error file
-        # 2. send error message to the channel
-    finally:
-        sys.exit(0)
+        logger.exception("Unexpected exception has occurred.")
+        source.http_error_count += 1
+        retcode = 1
+
+    try:
+        write_cache(cache, args.cache_file)
+        if should_notify(
+            source.http_error_count, args.error_notification_threshold
+        ):
+            send_error_notification(
+                logger,
+                args.output,
+                args.handle,
+                source.http_error_count,
+            )
+    except CacheWriteError:
+        logger.exception(
+            "Failed to write data into cache file '%s'.",
+            args.cache_file,
+        )
+        retcode = 1
+    except Exception:
+        logger.exception("Unexpected exception has occurred.")
+        retcode = 1
+
+    retcode = mask_retcode(retcode, args.mask_errors)
+    sys.exit(retcode)
+
+
+def mask_retcode(retcode: int, mask: bool) -> int:
+    """Determine whether or not to mask error and call sys.exit()."""
+    if mask:
+        retcode = 0
+
+    return retcode
 
 
 def parse_args() -> argparse.Namespace:
@@ -131,10 +187,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-v",
         "--verbose",
-        dest="verbosity",
-        action="store_true",
-        default=False,
-        help="Increase logging verbosity.",
+        action="count",
+        default=0,
+        help="Increase log level verbosity. Can be passed multiple times.",
     )
     parser.add_argument(
         "--rss-url",
@@ -168,7 +223,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cache",
-        dest="cache",
+        dest="cache_file",
         type=str,
         default=None,
         help="File which contains cache.",
@@ -197,7 +252,36 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Sleep between messages in order to avoid Excess Flood at IRC.",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--return-error",
+        dest="mask_errors",
+        action="store_false",
+        default=True,
+        help=(
+            "Return RC > 0 should error occur. "
+            "Majority of errors are masked because of cron."
+        ),
+    )
+    parser.add_argument(
+        "--error-notification-threshold",
+        dest="error_notification_threshold",
+        type=int,
+        default=0,
+        help=(
+            "Error threshold(cummulative over time) when error message "
+            "will be sent."
+        ),
+    )
+    args = parser.parse_args()
+    args.log_level = calc_log_level(args.verbose)
+
+    if args.cache_expiration < 0:
+        parser.error("Cache expiration can't be less than 0.")
+
+    if args.error_notification_threshold < 0:
+        parser.error("Error notification threshold can't be less than 0.")
+
+    return args
 
 
 def parse_news(data: str) -> Dict[str, Tuple[str, str]]:
@@ -244,21 +328,18 @@ def read_cache(logger: logging.Logger, cache_file: str) -> CachedData:
         cache = CachedData()
         logger.warning("Cache file '%s' doesn't exist.", cache_file)
     except EOFError:
-        # Note: occurred with empty file.
+        # NOTE(zstyblik): occurred with empty file.
         cache = CachedData()
         logger.debug(
             "Cache file '%s' is probably empty: %s",
             cache_file,
             traceback.format_exc(),
         )
+    except Exception as exception:
+        raise CacheReadError from exception
 
     logger.debug("%s", cache)
     return cache
-
-
-def signal_handler(signum, frame):
-    """Handle SIGALRM signal."""
-    raise TimeoutError
 
 
 def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
@@ -280,6 +361,51 @@ def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
             cache.items.pop(key)
 
 
+def send_error_notification(
+    logger: logging.Logger,
+    output: str,
+    handle: str,
+    http_error_count: int,
+) -> None:
+    """Send notification about error."""
+    signal.signal(signal.SIGALRM, signal_handler)
+    signal.alarm(config_options.PIPE_OPEN_TIMEOUT)
+    with open(output, "wb") as fhandle:
+        signal.alarm(0)
+        message = format_message(
+            "{}".format(http_error_count),
+            ("Failed to download RSS multiple times due to error", ""),
+            handle,
+        )
+        try:
+            write_message(logger, fhandle, message)
+        except (TimeoutError, ValueError):
+            logger.debug(
+                "Failed to write error message: %s",
+                traceback.format_exc(),
+            )
+
+
+def should_notify(error_count: int, threshold: int) -> bool:
+    """Determine whether to send notification about error or not.
+
+    NOTE that error notification will be sent every time when
+    error_count MODULO threshold = 0.
+    """
+    if int(threshold) == 0:
+        return False
+
+    if int(error_count % threshold) == 0:
+        return True
+
+    return False
+
+
+def signal_handler(signum, frame):
+    """Handle SIGALRM signal."""
+    raise TimeoutError
+
+
 def update_items_expiration(
     cache: CachedData,
     news: Dict[str, Tuple[str, str]],
@@ -291,13 +417,16 @@ def update_items_expiration(
         cache.items[key] = item_expiration
 
 
-def write_cache(data: CachedData, cache_file: str) -> None:
+def write_cache(data: CachedData, cache_file: str):
     """Dump data into file as a pickle."""
     if not cache_file:
         return
 
-    with open(cache_file, "wb") as fhandle:
-        pickle.dump(data, fhandle, pickle.HIGHEST_PROTOCOL)
+    try:
+        with open(cache_file, "wb") as fhandle:
+            pickle.dump(data, fhandle, pickle.HIGHEST_PROTOCOL)
+    except Exception as exception:
+        raise CacheWriteError from exception
 
 
 def write_data(
