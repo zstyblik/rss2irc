@@ -374,3 +374,21 @@ def test_scrub_items():
     }
     rss2irc.scrub_items(logger, test_cache)
     assert test_cache.items == expected
+
+
+@patch("rss2irc.time.time")
+def test_update_items_expiration_cache_items_as_news(mock_time):
+    """Test that it's possible to self-update TTL of cached items."""
+    mock_timestamp = 1717428210
+    mock_time.return_value = mock_timestamp
+    expiration = 60
+    expected_expiration = mock_timestamp + expiration
+
+    cache = CachedData()
+    cache.items["http://example.com/item1"] = 171742800
+    cache.items["http://example.com/item2"] = 171742800
+
+    rss2irc.update_items_expiration(cache, cache.items, expiration)
+
+    assert cache.items["http://example.com/item1"] == expected_expiration
+    assert cache.items["http://example.com/item2"] == expected_expiration
