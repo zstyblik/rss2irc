@@ -16,9 +16,6 @@ from lib import config_options
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
-# NOTE: these are newly added fixmes, therefore fixme!
-# FIXME: test return error arg?
-# FIXME: I guess test the newly added code(paths)?
 @pytest.mark.parametrize(
     "url,msg_attrs,handle,expected",
     [
@@ -132,6 +129,7 @@ def test_main_ideal(
     assert list(cache.items.keys()) == expected_cache_keys
     assert rss_url in cache.data_sources.keys()
     source = cache.get_source_by_url(rss_url)
+    assert source.http_error_count == 0
     assert source.url == rss_url
     assert source.http_etag == "pytest_etag"
     assert source.http_last_modified == "pytest_lm"
@@ -238,6 +236,7 @@ def test_main_cache_operations(
     # Verify data sources
     assert rss_url in cache.data_sources.keys()
     source = cache.get_source_by_url(rss_url)
+    assert source.http_error_count == 0
     assert source.url == rss_url
     assert source.http_etag == "pytest_etag"
     assert source.http_last_modified == "pytest_lm"
@@ -329,6 +328,7 @@ def test_main_cache_hit(
     assert list(cache.items.keys()) == expected_cache_keys
     assert rss_url in cache.data_sources.keys()
     source = cache.get_source_by_url(rss_url)
+    assert source.http_error_count == 0
     assert source.url == rss_url
     assert source.http_etag == "pytest_etag"
     assert source.http_last_modified == "pytest_last_modified"
