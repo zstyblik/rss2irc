@@ -100,12 +100,12 @@ def main():
         rss2irc.prune_news(logger, cache, news, args.cache_expiration)
         rss2irc.scrub_items(logger, cache)
 
-        slack_client = get_slack_web_client(
-            slack_token,
-            base_url=args.slack_base_url,
-            timeout=args.slack_timeout,
-        )
         if not args.cache_init:
+            slack_client = get_slack_web_client(
+                slack_token,
+                base_url=args.slack_base_url,
+                timeout=args.slack_timeout,
+            )
             process_news(
                 logger,
                 news,
