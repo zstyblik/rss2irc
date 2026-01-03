@@ -57,7 +57,7 @@ def format_message(
 def get_slack_token() -> str:
     """Get Slack token from ENV variable.
 
-    :raises SlackTokenMissing: raised when env variable SLACK_TOKEN is not set
+    :raises SlackTokenError: raised when env variable SLACK_TOKEN is not set
     """
     slack_token = os.environ.get("SLACK_TOKEN", None)
     if slack_token:
