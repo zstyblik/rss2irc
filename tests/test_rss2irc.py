@@ -491,6 +491,8 @@ def test_main_empty_response_error(
     assert exception.code == expected_retcode
     mock_path_exists.assert_called_with(fixture_output_file)
     mock_read_cache.assert_called_once()
+    mock_get_rss.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
     assert caplog.record_tuples == expected_log_records
     assert source1.http_error_count == 1
 
@@ -580,6 +582,8 @@ def test_main_no_news_error(
     assert exception.code == expected_retcode
     mock_path_exists.assert_called_with(fixture_output_file)
     mock_read_cache.assert_called_once()
+    mock_get_rss.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
     assert caplog.record_tuples == expected_log_records
     assert source1.http_error_count == 10
     # NOTE(zstyblik): check that we have all items and expiration has been
@@ -672,8 +676,111 @@ def test_main_random_exception(
     assert exception.code == expected_retcode
     mock_path_exists.assert_called_with(fixture_output_file)
     mock_read_cache.assert_called_once()
+    mock_get_rss.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
     assert caplog.record_tuples == expected_log_records
     assert source1.http_error_count == 1
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.wrap_write_cache")
+@patch("rss2irc.read_cache")
+def test_main_wrap_write_cache_error(
+    mock_read_cache,
+    mock_wrap_write_cache,
+    mock_s_isfifo,
+    extra_args,
+    expected_retcode,
+    fixture_http_server,
+    fixture_output_file,
+):
+    """Test that error in wrap_write_cache is handled as expected."""
+    expected_cache_keys = [
+        "http://www.example.com/scan.php?page=news_item&px=item1",
+        "http://www.example.com/scan.php?page=news_item&px=item2",
+    ]
+    expected_output = [
+        (
+            b"[test] Item1 | "
+            b"http://www.example.com/scan.php?page=news_item&px=item1\n"
+        ),
+        (
+            b"[test] Item2 | "
+            b"http://www.example.com/scan.php?page=news_item&px=item2\n"
+        ),
+    ]
+
+    handle = "test"
+    http_timeout = "10"
+    rss_url = fixture_http_server.url
+    fixture_cache_file = "/fake/path/cache.file"
+
+    cache = CachedData()
+    mock_read_cache.return_value = cache
+    mock_wrap_write_cache.return_value = 1
+    mock_s_isfifo.return_value = True
+
+    rss_fname = os.path.join(SCRIPT_PATH, "files", "rss.xml")
+    with open(rss_fname, "rb") as fhandle:
+        fixture_http_server.serve_content(
+            fhandle.read().decode("utf-8"),
+            200,
+            {"ETag": "pytest_etag", "Last-Modified": "pytest_lm"},
+        )
+
+    args = [
+        "./rss2irc.py",
+        "-v",
+        "--rss-url",
+        rss_url,
+        "--rss-http-timeout",
+        http_timeout,
+        "--handle",
+        handle,
+        "--cache",
+        fixture_cache_file,
+        "--output",
+        fixture_output_file,
+    ] + extra_args
+
+    print("URL: {:s}".format(rss_url))
+    print("Handle: {:s}".format(handle))
+    print("Cache file: {:s}".format(fixture_cache_file))
+    print("Output file: {:s}".format(fixture_output_file))
+
+    exception = None
+    with patch.object(sys, "argv", args):
+        try:
+            rss2irc.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+
+    assert list(cache.items.keys()) == expected_cache_keys
+    assert rss_url in cache.data_sources.keys()
+    source = cache.get_source_by_url(rss_url)
+    assert source.http_error_count == 0
+    assert source.url == rss_url
+    assert source.http_etag == "pytest_etag"
+    assert source.http_last_modified == "pytest_lm"
+    assert source.last_used_ts > int(time.time()) - 60
+    # check output file
+    with open(fixture_output_file, "rb") as fhandle:
+        output = fhandle.readlines()
+
+    assert sorted(output) == sorted(expected_output)
+
+    mock_read_cache.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
 
 
 def test_parse_news():
