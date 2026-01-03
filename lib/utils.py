@@ -9,6 +9,15 @@ def calc_log_level(count: int) -> int:
     return log_level
 
 
+def escalate_retcode(new_rc: int, old_rc: int) -> int:
+    """Return retcode which is bigger."""
+    retcode = old_rc
+    if new_rc > old_rc:
+        retcode = new_rc
+
+    return retcode
+
+
 def mask_retcode(retcode: int, mask: bool) -> int:
     """Determine whether or not to mask error return code, if so mask it."""
     if mask:

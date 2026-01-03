@@ -126,7 +126,7 @@ def main():
             "Error while reading cache file '%s'.",
             args.cache_file,
         )
-        retcode = utils.mask_retcode(1, args.mask_error)
+        retcode = utils.mask_retcode(1, args.mask_errors)
         # NOTE(zstyblik): since cache file couldn't be opened, it doesn't make
         # sense writing it. Therefore, call sys.exit().
         sys.exit(retcode)
@@ -151,16 +151,8 @@ def main():
         source.http_error_count += 1
         retcode = 1
 
-    # FIXME: put try-except into function/wrapper and just return RC? :\
-    try:
-        write_cache(cache, args.cache_file)
-    except CacheWriteError:
-        logger.exception(
-            "Failed to write data into cache file '%s'.",
-            args.cache_file,
-        )
-        retcode = 1
-
+    write_retcode = wrap_write_cache(logger, cache, args.cache_file)
+    retcode = utils.escalate_retcode(write_retcode, retcode)
     retcode = utils.mask_retcode(retcode, args.mask_errors)
     sys.exit(retcode)
 
@@ -352,6 +344,25 @@ def update_items_expiration(
     item_expiration = int(time.time()) + expiration
     for key in list(news.keys()):
         cache.items[key] = item_expiration
+
+
+def wrap_write_cache(
+    logger: logging.Logger,
+    cache: CachedData,
+    cache_file: str,
+) -> int:
+    """Call write_cache() and return 0 on success or 1 on error."""
+    retcode = 0
+    try:
+        write_cache(cache, cache_file)
+    except CacheWriteError:
+        logger.exception(
+            "Failed to write data into cache file '%s'.",
+            cache_file,
+        )
+        retcode = 1
+
+    return retcode
 
 
 def write_cache(data: CachedData, cache_file: str):

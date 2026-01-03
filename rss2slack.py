@@ -19,7 +19,6 @@ import rss2irc
 from lib import config_options
 from lib import utils
 from lib.exceptions import CacheReadError
-from lib.exceptions import CacheWriteError
 from lib.exceptions import EmptyResponseError
 from lib.exceptions import NoNewsError
 from lib.exceptions import NotModifiedError
@@ -121,14 +120,14 @@ def main():
         retcode = 0
     except SlackTokenError:
         logger.exception("Environment variable SLACK_TOKEN must be set.")
-        retcode = utils.mask_retcode(1, args.mask_error)
+        retcode = utils.mask_retcode(1, args.mask_errors)
         sys.exit(retcode)
     except CacheReadError:
         logger.exception(
             "Error while reading cache file '%s'.",
             args.cache_file,
         )
-        retcode = utils.mask_retcode(1, args.mask_error)
+        retcode = utils.mask_retcode(1, args.mask_errors)
         # NOTE(zstyblik): since cache file couldn't be opened, it doesn't make
         # sense writing it. Therefore, call sys.exit().
         sys.exit(retcode)
@@ -157,15 +156,8 @@ def main():
         source.http_error_count += 1
         retcode = 1
 
-    try:
-        rss2irc.write_cache(cache, args.cache_file)
-    except CacheWriteError:
-        logger.exception(
-            "Failed to write data into cache file '%s'.",
-            args.cache_file,
-        )
-        retcode = 1
-
+    write_retcode = rss2irc.wrap_write_cache(logger, cache, args.cache_file)
+    retcode = utils.escalate_retcode(write_retcode, retcode)
     retcode = utils.mask_retcode(retcode, args.mask_errors)
     sys.exit(retcode)
 
