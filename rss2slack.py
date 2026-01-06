@@ -153,7 +153,10 @@ def main():
         retcode = 0
     except Exception:
         logger.exception("Unexpected exception has occurred.")
-        source.http_error_count += 1
+        if cache:
+            source = cache.get_source_by_url(args.rss_url)
+            source.http_error_count += 1
+
         retcode = 1
 
     write_retcode = rss2irc.wrap_write_cache(logger, cache, args.cache_file)

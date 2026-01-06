@@ -257,11 +257,13 @@ def test_main_cache_operations(
         (["--return-error"], 1),
     ],
 )
+@patch("rss2irc.wrap_write_cache")
 @patch("rss2irc.read_cache")
 @patch("rss2irc.os.path.exists")
 def test_main_cache_read_error(
     mock_path_exists,
     mock_read_cache,
+    mock_wrap_write_cache,
     extra_args,
     expected_retcode,
     caplog,
@@ -314,6 +316,7 @@ def test_main_cache_read_error(
     assert exception.code == expected_retcode
     mock_path_exists.assert_called_with(fixture_output_file)
     mock_read_cache.assert_called_once()
+    mock_wrap_write_cache.assert_not_called()
     assert caplog.record_tuples == expected_log_records
 
 

@@ -342,6 +342,12 @@ def test_main_ideal(
     assert data in expected_slack_requests
 
 
+# FIXME: SlackTokenError
+# FIXME: CacheReadError
+# FIXME: random exception
+# FIXME: WriteCacheError
+
+
 def test_process_page_items():
     """Test process_page_items()."""
     pages = [

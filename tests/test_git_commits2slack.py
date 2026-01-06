@@ -387,3 +387,7 @@ def test_main_ideal(
     assert req0.method == "POST"
     data = req0.get_json()
     assert data == expected_slack_requests[0]
+
+
+# FIXME: SlackTokenError
+# FIXME: random exception

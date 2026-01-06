@@ -334,6 +334,14 @@ def test_main_cache_hit(
     assert len(fixture_http_server.requests) == 0
 
 
+# FIXME: SlackTokenError
+# FIXME: CacheReadError
+# FIXME: EmptyRsp
+# FIXME: NoNews
+# FIXME: random exception
+# FIXME: WriteCacheError
+
+
 def test_parse_news():
     """Test parse_news()."""
     expected_news = {
