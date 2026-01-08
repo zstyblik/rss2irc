@@ -19,6 +19,7 @@ import requests
 import rss2irc
 import rss2slack
 from lib import CachedData
+from lib import cli_args
 from lib import config_options
 from lib import utils
 from lib.exceptions import CacheReadError
@@ -232,105 +233,38 @@ def main():
 def parse_args() -> argparse.Namespace:
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--cache",
-        dest="cache_file",
-        type=str,
-        default=None,
-        help="Path to cache file.",
-    )
-    parser.add_argument(
-        "--cache-expiration",
-        dest="cache_expiration",
-        type=int,
-        default=config_options.CACHE_EXPIRATION,
-        help=(
-            "How long to keep items in cache. "
-            "Defaults to %(default)s seconds."
-        ),
-    )
-    parser.add_argument(
-        "--cache-init",
-        dest="cache_init",
-        action="store_true",
-        default=False,
-        help=(
-            "Prevents posting news to IRC. This is useful "
-            "when bootstrapping new RSS feed."
-        ),
-    )
-    parser.add_argument(
+    cli_args.add_generic_args(parser)
+    cli_args.add_cache_file_arg_group(parser)
+
+    github_group = parser.add_argument_group("GitHub options")
+    github_group.add_argument(
         "--gh-owner",
         dest="gh_owner",
         required=True,
         type=str,
         help="Owner/org of the repository to track.",
     )
-    parser.add_argument(
+    github_group.add_argument(
         "--gh-repo",
         dest="gh_repo",
         required=True,
         type=str,
         help="Repository of owner/org to track.",
     )
-    parser.add_argument(
+    github_group.add_argument(
         "--gh-section",
         dest="gh_section",
         required=True,
         choices=["issues", "pulls"],
         help='GH "section" to track.',
     )
-    parser.add_argument(
-        "--return-error",
-        dest="mask_errors",
-        action="store_false",
-        default=True,
-        help=(
-            "Return RC > 0 should error occur. "
-            "Majority of errors are masked because of cron."
-        ),
-    )
-    parser.add_argument(
-        "--slack-base-url",
-        dest="slack_base_url",
-        type=str,
-        default=rss2slack.SLACK_BASE_URL,
-        help="Base URL for Slack client.",
-    )
-    parser.add_argument(
-        "--slack-channel",
-        dest="slack_channel",
-        type=str,
-        required=True,
-        help="Name of Slack channel to send formatted news to.",
-    )
-    parser.add_argument(
-        "--slack-timeout",
-        dest="slack_timeout",
-        type=int,
-        default=config_options.HTTP_TIMEOUT,
-        help="Slack API Timeout. Defaults to %(default)s seconds.",
-    )
-    parser.add_argument(
-        "--sleep",
-        dest="sleep",
-        type=int,
-        default=2,
-        help=(
-            "Sleep between messages in order to avoid "
-            "possible excess flood/API call rate limit."
-        ),
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        help="Increase log level verbosity. Can be passed multiple times.",
-    )
+
+    cli_args.add_slack_arg_group(parser, rss2slack.SLACK_BASE_URL)
     args = parser.parse_args()
     args.log_level = utils.calc_log_level(args.verbose)
 
+    cli_args.check_cache_expiration_arg(parser, args)
+    cli_args.check_sleep_arg(parser, args)
     return args
 
 

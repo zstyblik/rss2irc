@@ -20,6 +20,7 @@ import feedparser
 import requests
 
 from lib import CachedData
+from lib import cli_args
 from lib import config_options
 from lib import utils
 from lib.exceptions import CacheReadError
@@ -163,94 +164,15 @@ def main():
 def parse_args() -> argparse.Namespace:
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--cache",
-        dest="cache_file",
-        type=str,
-        default=None,
-        help="File which contains cache.",
-    )
-    parser.add_argument(
-        "--cache-expiration",
-        dest="cache_expiration",
-        type=int,
-        default=config_options.CACHE_EXPIRATION,
-        help=(
-            "How long to keep items in cache. "
-            "Defaults to %(default)s seconds."
-        ),
-    )
-    parser.add_argument(
-        "--cache-init",
-        dest="cache_init",
-        action="store_true",
-        default=False,
-        help=(
-            "Prevents posting news to IRC. This is useful "
-            "when bootstrapping new RSS feed."
-        ),
-    )
-    parser.add_argument(
-        "--handle",
-        dest="handle",
-        type=str,
-        default=None,
-        help="IRC handle of this feed.",
-    )
-    parser.add_argument(
-        "--output",
-        dest="output",
-        type=str,
-        required=True,
-        help="Where to output formatted news.",
-    )
-    parser.add_argument(
-        "--return-error",
-        dest="mask_errors",
-        action="store_false",
-        default=True,
-        help=(
-            "Return RC > 0 should error occur. "
-            "Majority of errors are masked because of cron."
-        ),
-    )
-    parser.add_argument(
-        "--rss-url",
-        dest="rss_url",
-        type=str,
-        required=True,
-        help="URL of RSS Feed.",
-    )
-    parser.add_argument(
-        "--rss-http-timeout",
-        dest="rss_http_timeout",
-        type=int,
-        default=config_options.HTTP_TIMEOUT,
-        help="HTTP Timeout. Defaults to %(default)s seconds.",
-    )
-    parser.add_argument(
-        "--sleep",
-        dest="sleep",
-        type=int,
-        default=2,
-        help="Sleep between messages in order to avoid Excess Flood at IRC.",
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        help="Increase log level verbosity. Can be passed multiple times.",
-    )
+    generic_args = cli_args.GenericArgsCfg(handle=True, output=True)
+    cli_args.add_generic_args(parser, generic_args)
+    cli_args.add_cache_file_arg_group(parser)
+    cli_args.add_rss_arg_group(parser)
     args = parser.parse_args()
     args.log_level = utils.calc_log_level(args.verbose)
 
-    if args.cache_expiration < 0:
-        parser.error("Cache expiration cannot be less than 0.")
-
-    if args.sleep < 0:
-        parser.error("Sleep interval cannot be less than 0.")
-
+    cli_args.check_cache_expiration_arg(parser, args)
+    cli_args.check_sleep_arg(parser, args)
     return args
 
 
