@@ -18,7 +18,6 @@ from lib import CachedData
 from lib import cli_args
 from lib import config_options
 from lib import utils
-from lib.exceptions import CacheReadError
 from lib.exceptions import EmptyResponseError
 from lib.exceptions import NoNewsError
 from lib.exceptions import NotModifiedError
@@ -81,13 +80,16 @@ def main():
     logger = logging.getLogger("phpbb2slack")
     logger.setLevel(args.log_level)
 
-    cache = None
     retcode = 0
+    cache = rss2irc.wrap_read_cache(logger, args.cache_file)
+    if cache is None:
+        retcode = utils.mask_retcode(1, args.mask_errors)
+        sys.exit(retcode)
+
+    source = cache.get_source_by_url(args.rss_url)
     try:
         slack_token = rss2slack.get_slack_token()
         authors = get_authors_from_file(logger, args.authors_file)
-        cache = rss2irc.read_cache(logger, args.cache_file)
-        source = cache.get_source_by_url(args.rss_url)
 
         rsp = rss2irc.get_rss(
             logger,
@@ -124,15 +126,6 @@ def main():
         logger.exception("Environment variable SLACK_TOKEN must be set.")
         retcode = utils.mask_retcode(1, args.mask_errors)
         sys.exit(retcode)
-    except CacheReadError:
-        logger.exception(
-            "Error while reading cache file '%s'.",
-            args.cache_file,
-        )
-        retcode = utils.mask_retcode(1, args.mask_errors)
-        # NOTE(zstyblik): since cache file couldn't be opened, it doesn't make
-        # sense writing it. Therefore, call sys.exit().
-        sys.exit(retcode)
     except NotModifiedError:
         logger.debug("No new RSS data since the last run.")
         rss2irc.update_items_expiration(
@@ -155,10 +148,7 @@ def main():
         retcode = 0
     except Exception:
         logger.exception("Unexpected exception has occurred.")
-        if cache:
-            source = cache.get_source_by_url(args.rss_url)
-            source.http_error_count += 1
-
+        source.http_error_count += 1
         retcode = 1
 
     write_retcode = rss2irc.wrap_write_cache(logger, cache, args.cache_file)
