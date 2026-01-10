@@ -22,7 +22,6 @@ from lib import CachedData
 from lib import cli_args
 from lib import config_options
 from lib import utils
-from lib.exceptions import CacheReadError
 from lib.exceptions import SlackTokenError
 
 ALIASES = {
@@ -164,13 +163,16 @@ def main():
     logger = logging.getLogger("gh2slack")
     logger.setLevel(args.log_level)
 
-    cache = None
     retcode = 0
+    cache = rss2irc.wrap_read_cache(logger, args.cache_file)
+    if cache is None:
+        retcode = utils.mask_retcode(1, args.mask_errors)
+        sys.exit(retcode)
+
     try:
         slack_token = rss2slack.get_slack_token()
         url = get_gh_api_url(args.gh_owner, args.gh_repo, args.gh_section)
         pages = gh_request(logger, url)
-
         logger.debug("Got %i pages from GH.", len(pages))
         if not pages:
             logger.info(
@@ -178,7 +180,6 @@ def main():
             )
             sys.exit(0)
 
-        cache = rss2irc.read_cache(logger, args.cache_file)
         scrub_items(logger, cache)
         # NOTE(zstyblik): I have failed to find web link to repo in GH response.
         # Therefore, let's create one.
@@ -210,15 +211,6 @@ def main():
     except SlackTokenError:
         logger.exception("Environment variable SLACK_TOKEN must be set.")
         retcode = utils.mask_retcode(1, args.mask_errors)
-        sys.exit(retcode)
-    except CacheReadError:
-        logger.exception(
-            "Error while reading cache file '%s'.",
-            args.cache_file,
-        )
-        retcode = utils.mask_retcode(1, args.mask_errors)
-        # NOTE(zstyblik): since cache file couldn't be opened, it doesn't make
-        # sense writing it. Therefore, call sys.exit().
         sys.exit(retcode)
     except Exception:
         logger.exception("Unexpected exception has occurred.")

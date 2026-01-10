@@ -94,12 +94,14 @@ def main():
         logger.error("Ouput '%s' doesn't exist.", args.output)
         sys.exit(1)
 
-    cache = None
     retcode = 0
-    try:
-        cache = read_cache(logger, args.cache_file)
-        source = cache.get_source_by_url(args.rss_url)
+    cache = wrap_read_cache(logger, args.cache_file)
+    if cache is None:
+        retcode = utils.mask_retcode(1, args.mask_errors)
+        sys.exit(retcode)
 
+    source = cache.get_source_by_url(args.rss_url)
+    try:
         rsp = get_rss(
             logger,
             args.rss_url,
@@ -122,15 +124,6 @@ def main():
         cache.scrub_data_sources()
         source.http_error_count = 0
         retcode = 0
-    except CacheReadError:
-        logger.exception(
-            "Error while reading cache file '%s'.",
-            args.cache_file,
-        )
-        retcode = utils.mask_retcode(1, args.mask_errors)
-        # NOTE(zstyblik): since cache file couldn't be opened, it doesn't make
-        # sense writing it. Therefore, call sys.exit().
-        sys.exit(retcode)
     except NotModifiedError:
         logger.debug("No new RSS data since the last run.")
         update_items_expiration(cache, cache.items, args.cache_expiration)
@@ -149,10 +142,7 @@ def main():
         retcode = 0
     except Exception:
         logger.exception("Unexpected exception has occurred.")
-        if cache:
-            source = cache.get_source_by_url(args.rss_url)
-            source.http_error_count += 1
-
+        source.http_error_count += 1
         retcode = 1
 
     write_retcode = wrap_write_cache(logger, cache, args.cache_file)
@@ -288,6 +278,18 @@ def wrap_write_cache(
         retcode = 1
 
     return retcode
+
+
+def wrap_read_cache(logger: logging.Logger, cache_file: str):
+    """Call read_cache() and return cached data or log error and return None."""
+    cache = None
+    try:
+        cache = read_cache(logger, cache_file)
+    except CacheReadError:
+        logger.exception("Error while reading cache file '%s'.", cache_file)
+        cache = None
+
+    return cache
 
 
 def write_cache(data: CachedData, cache_file: str):

@@ -246,7 +246,9 @@ def test_main_ideal(
     ],
 )
 @patch("rss2slack.rss2irc.wrap_write_cache")
+@patch("rss2slack.rss2irc.read_cache")
 def test_main_slack_token_error(
+    mock_read_cache,
     mock_wrap_write_cache,
     extra_args,
     expected_retcode,
@@ -266,6 +268,8 @@ def test_main_slack_token_error(
     slack_base_url = "https://slack.example.com"
     expected_slack_channel = "test"
     fixture_cache_file = "/path/not/exist/cache.file"
+
+    mock_read_cache.return_value = CachedData()
 
     exception = None
     args = [
