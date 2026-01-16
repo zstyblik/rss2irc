@@ -589,7 +589,7 @@ def test_main_no_news_error(
     monkeypatch,
     caplog,
 ):
-    """Test that EmptyResponseError is handled as expected."""
+    """Test that NoNewsError is handled as expected."""
     expected_log_records = [
         (
             "rss2slack",
@@ -673,5 +673,175 @@ def test_main_no_news_error(
         assert cache.items[key] > frozen_ts
 
 
-# FIXME: random exception
-# FIXME: WriteCacheError
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("rss2irc.wrap_write_cache")
+@patch("rss2slack.get_slack_token")
+@patch("rss2irc.read_cache")
+def test_main_random_exception(
+    mock_read_cache,
+    mock_get_slack_token,
+    mock_wrap_write_cache,
+    extra_args,
+    expected_retcode,
+    caplog,
+):
+    """Test that unexpected exception is handled as expected."""
+    expected_log_records = [
+        (
+            "rss2slack",
+            40,
+            "Unexpected exception has occurred.",
+        ),
+    ]
+    handle = "test"
+    http_timeout = "10"
+    rss_url = "http://rss.example.com"
+    slack_base_url = "https://slack.example.com"
+    expected_slack_channel = "test"
+    cache_key = "http://example.com"
+    frozen_ts = int(time.time())
+    fixture_cache_file = "/path/not/exist/cache.file"
+
+    cache = CachedData()
+    cache.items[cache_key] = frozen_ts
+    cache.items["https://expired.example.com"] = frozen_ts
+    source1 = cache.get_source_by_url(rss_url)
+    source1.http_error_count = 1
+    source1.http_etag = ""
+    source1.http_last_modified = ""
+    source1.last_used_ts = frozen_ts - 2 * 86400
+    source2 = cache.get_source_by_url("http://delete.example.com")
+    source2.last_used_ts = frozen_ts - 2 * config_options.DATA_SOURCE_EXPIRATION
+
+    mock_read_cache.return_value = cache
+    mock_get_slack_token.side_effect = ValueError("pytest")
+    mock_wrap_write_cache.return_value = 0
+
+    exception = None
+    args = [
+        "./rss2slack.py",
+        "--rss-url",
+        rss_url,
+        "--rss-http-timeout",
+        http_timeout,
+        "--handle",
+        handle,
+        "--cache",
+        fixture_cache_file,
+        "--slack-base-url",
+        slack_base_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-vv",
+    ] + extra_args
+
+    print("RSS URL: {:s}".format(rss_url))
+    print("Slack URL: {:s}".format(slack_base_url))
+    print("Handle: {:s}".format(handle))
+    print("Cache file: {:s}".format(fixture_cache_file))
+
+    with patch.object(sys, "argv", args):
+        try:
+            rss2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    mock_read_cache.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
+    assert caplog.record_tuples == expected_log_records
+    assert source1.http_error_count == 2
+    # NOTE(zstyblik): check that we have all items and expiration is the same.
+    assert len(cache.items) == 2
+    for key in cache.items:
+        assert cache.items[key] == frozen_ts
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        (["--cache-init"], 0),
+        (["--return-error", "--cache-init"], 1),
+    ],
+)
+@patch("rss2irc.wrap_write_cache")
+@patch("rss2irc.get_rss")
+@patch("rss2irc.read_cache")
+def test_main_wrap_write_cache_error(
+    mock_read_cache,
+    mock_get_rss,
+    mock_wrap_write_cache,
+    monkeypatch,
+    extra_args,
+    expected_retcode,
+    caplog,
+):
+    """Test that error from wrap_write_cache_error() is handled as expected."""
+    expected_log_records = []
+    handle = "test"
+    http_timeout = "10"
+    rss_url = "http://rss.example.com"
+    slack_base_url = "https://slack.example.com"
+    expected_slack_channel = "test"
+    fixture_cache_file = "/path/not/exist/cache.file"
+
+    cache = CachedData()
+
+    # Mock/set SLACK_TOKEN
+    monkeypatch.setenv("SLACK_TOKEN", "test")
+    mock_read_cache.return_value = cache
+    mock_rss_fname = os.path.join(SCRIPT_PATH, "files", "rss.xml")
+    mock_rsp = Mock()
+    mock_rsp.headers = {}
+    with open(mock_rss_fname, "r", encoding="utf-8") as fhandle:
+        mock_rsp.text = fhandle.read()
+
+    mock_get_rss.return_value = mock_rsp
+    mock_wrap_write_cache.return_value = 1
+
+    exception = None
+    args = [
+        "./rss2slack.py",
+        "--rss-url",
+        rss_url,
+        "--rss-http-timeout",
+        http_timeout,
+        "--handle",
+        handle,
+        "--cache",
+        fixture_cache_file,
+        "--slack-base-url",
+        slack_base_url,
+        "--slack-channel",
+        expected_slack_channel,
+        "--slack-timeout",
+        "10",
+        "-vv",
+    ] + extra_args
+
+    print("RSS URL: {:s}".format(rss_url))
+    print("Slack URL: {:s}".format(slack_base_url))
+    print("Handle: {:s}".format(handle))
+    print("Cache file: {:s}".format(fixture_cache_file))
+
+    with patch.object(sys, "argv", args):
+        try:
+            rss2slack.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    mock_read_cache.assert_called_once()
+    mock_get_rss.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
+    assert caplog.record_tuples == expected_log_records
