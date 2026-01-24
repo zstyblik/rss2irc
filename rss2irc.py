@@ -64,7 +64,12 @@ def get_rss(
     """
     # Randomize user agent, because CF likes to block for no apparent reason.
     user_agent = "rss2irc_{:d}".format(int(time.time()))
-    headers = {"User-Agent": user_agent}
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        ),
+    }
     if extra_headers:
         for key, value in extra_headers.items():
             headers[key] = value
