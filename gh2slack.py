@@ -122,7 +122,7 @@ def gh_request(
     responses.
     """
     logger.debug("Requesting %s", url)
-    user_agent = "gh2slack_{:d}".format(int(time.time()))
+    user_agent = "gh2slack-script"
     rsp = requests.get(
         url,
         headers={
