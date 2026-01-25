@@ -63,7 +63,7 @@ def get_rss(
     :raises requests.exceptions.BaseHTTPError: raised when HTTP error occurs
     """
     # Randomize user agent, because CF likes to block for no apparent reason.
-    user_agent = "rss2irc_{:d}".format(int(time.time()))
+    user_agent = "rss2irc-script"
     headers = {
         "User-Agent": user_agent,
         "Accept": (
