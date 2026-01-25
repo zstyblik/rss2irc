@@ -8,18 +8,21 @@ import logging
 import re
 import sys
 import time
-import traceback
 import urllib.parse
+from dataclasses import dataclass
 from typing import Dict
 from typing import List
 from typing import Set
 
 import requests
 
-import rss2irc  # noqa: I202
-import rss2slack  # noqa: I202
-from lib import CachedData  # noqa: I202
-from lib import config_options  # noqa: I202
+import rss2irc
+import rss2slack
+from lib import CachedData
+from lib import cli_args
+from lib import config_options
+from lib import utils
+from lib.exceptions import SlackTokenError
 
 ALIASES = {
     "issues": "issue",
@@ -28,6 +31,15 @@ ALIASES = {
 DEFAULT_HTTP_PROTO = "https"
 DEFAULT_GH_URL = "github.com"
 RE_LINK_REL_NEXT = re.compile(r"<(?P<next>.*)>; rel=\"next")
+
+
+@dataclass
+class GHRepoInfo:
+    """Class holds information about GitHub repository."""
+
+    repo_owner: str
+    repo_name: str
+    repo_section: str
 
 
 def format_message(
@@ -42,11 +54,10 @@ def format_message(
     try:
         title = cache_item["title"].encode("utf-8")
     except UnicodeEncodeError:
-        logger.error(
+        logger.exception(
             "Failed to encode title as UTF-8: %s",
             repr(cache_item.get("title", None)),
         )
-        logger.error("%s", traceback.format_exc())
         title = "Unknown title due to UTF-8 exception, {:s}#{:d}".format(
             section, cache_item["number"]
         )
@@ -62,7 +73,7 @@ def format_message(
             title.decode("utf-8"),
         )
     except UnicodeDecodeError:
-        logger.error("Failed to format message: %s", traceback.format_exc())
+        logger.exception("Failed to format message.")
         message = "[{:s}/{:s}] Failed to format message for {:s}#{:d}".format(
             owner, repo, section, cache_item["number"]
         )
@@ -111,7 +122,7 @@ def gh_request(
     responses.
     """
     logger.debug("Requesting %s", url)
-    user_agent = "gh2slack_{:d}".format(int(time.time()))
+    user_agent = "gh2slack-script"
     rsp = requests.get(
         url,
         headers={
@@ -147,17 +158,21 @@ def gh_request(
 
 def main():
     """Fetch issues/PRs from GitHub and post them to Slack."""
+    args = parse_args()
     logging.basicConfig(stream=sys.stdout, level=logging.ERROR)
     logger = logging.getLogger("gh2slack")
-    args = parse_args()
-    if args.verbosity:
-        logger.setLevel(logging.DEBUG)
+    logger.setLevel(args.log_level)
+
+    retcode = 0
+    cache = rss2irc.wrap_read_cache(logger, args.cache_file)
+    if cache is None:
+        retcode = utils.mask_retcode(1, args.mask_errors)
+        sys.exit(retcode)
 
     try:
         slack_token = rss2slack.get_slack_token()
         url = get_gh_api_url(args.gh_owner, args.gh_repo, args.gh_section)
         pages = gh_request(logger, url)
-
         logger.debug("Got %i pages from GH.", len(pages))
         if not pages:
             logger.info(
@@ -165,146 +180,120 @@ def main():
             )
             sys.exit(0)
 
-        cache = rss2irc.read_cache(logger, args.cache)
         scrub_items(logger, cache)
-
-        # Note: I have failed to find web link to repo in GH response.
+        # NOTE(zstyblik): I have failed to find web link to repo in GH response.
         # Therefore, let's create one.
         repository_url = get_gh_repository_url(args.gh_owner, args.gh_repo)
         item_expiration = int(time.time()) + args.cache_expiration
         to_publish = process_page_items(
             logger, cache, pages, item_expiration, repository_url
         )
-
+        gh_data = GHRepoInfo(
+            repo_owner=args.gh_owner,
+            repo_name=args.gh_repo,
+            repo_section=args.gh_section,
+        )
         if not args.cache_init and to_publish:
             slack_client = rss2slack.get_slack_web_client(
                 slack_token, args.slack_base_url, args.slack_timeout
             )
-            for html_url in to_publish:
-                cache_item = cache.items[html_url]
-                try:
-                    msg_blocks = [
-                        format_message(
-                            logger,
-                            args.gh_owner,
-                            args.gh_repo,
-                            ALIASES[args.gh_section],
-                            html_url,
-                            cache_item,
-                        )
-                    ]
-                    rss2slack.post_to_slack(
-                        logger,
-                        msg_blocks,
-                        slack_client,
-                        args.slack_channel,
-                    )
-                except Exception:
-                    logger.error("%s", traceback.format_exc())
-                    cache.items.pop(html_url)
-                finally:
-                    time.sleep(args.sleep)
+            process_news(
+                logger,
+                cache,
+                to_publish,
+                args.sleep,
+                gh_data,
+                slack_client,
+                args.slack_channel,
+            )
 
-        rss2irc.write_cache(cache, args.cache)
+        retcode = 0
+    except SlackTokenError:
+        logger.exception("Environment variable SLACK_TOKEN must be set.")
+        retcode = utils.mask_retcode(1, args.mask_errors)
+        sys.exit(retcode)
     except Exception:
-        logger.debug("%s", traceback.format_exc())
-        # TODO(zstyblik):
-        # 1. touch error file
-        # 2. send error message to the channel
-    finally:
-        sys.exit(0)
+        logger.exception("Unexpected exception has occurred.")
+        retcode = 1
+
+    write_retcode = rss2irc.wrap_write_cache(logger, cache, args.cache_file)
+    retcode = utils.escalate_retcode(write_retcode, retcode)
+    retcode = utils.mask_retcode(retcode, args.mask_errors)
+    sys.exit(retcode)
 
 
 def parse_args() -> argparse.Namespace:
     """Return parsed CLI args."""
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--cache",
-        dest="cache",
-        type=str,
-        default=None,
-        help="Path to cache file.",
-    )
-    parser.add_argument(
-        "--cache-expiration",
-        dest="cache_expiration",
-        type=int,
-        default=config_options.CACHE_EXPIRATION,
-        help="Time, in seconds, for how long to keep items " "in cache.",
-    )
-    parser.add_argument(
-        "--cache-init",
-        dest="cache_init",
-        action="store_true",
-        default=False,
-        help=(
-            "Prevents posting news to IRC. This is useful "
-            "when bootstrapping new RSS feed."
-        ),
-    )
-    parser.add_argument(
+    cli_args.add_generic_args(parser)
+    cli_args.add_cache_file_arg_group(parser)
+
+    github_group = parser.add_argument_group("GitHub options")
+    github_group.add_argument(
         "--gh-owner",
         dest="gh_owner",
         required=True,
         type=str,
         help="Owner/org of the repository to track.",
     )
-    parser.add_argument(
+    github_group.add_argument(
         "--gh-repo",
         dest="gh_repo",
         required=True,
         type=str,
         help="Repository of owner/org to track.",
     )
-    parser.add_argument(
+    github_group.add_argument(
         "--gh-section",
         dest="gh_section",
         required=True,
         choices=["issues", "pulls"],
         help='GH "section" to track.',
     )
-    parser.add_argument(
-        "--slack-base-url",
-        dest="slack_base_url",
-        type=str,
-        default=rss2slack.SLACK_BASE_URL,
-        help="Base URL for Slack client.",
-    )
-    parser.add_argument(
-        "--slack-channel",
-        dest="slack_channel",
-        type=str,
-        required=True,
-        help="Name of Slack channel to send formatted news to.",
-    )
-    parser.add_argument(
-        "--slack-timeout",
-        dest="slack_timeout",
-        type=int,
-        default=config_options.HTTP_TIMEOUT,
-        help="Slack API Timeout. Defaults to {:d} seconds.".format(
-            config_options.HTTP_TIMEOUT
-        ),
-    )
-    parser.add_argument(
-        "--sleep",
-        dest="sleep",
-        type=int,
-        default=2,
-        help=(
-            "Sleep between messages in order to avoid "
-            "possible excess flood/API call rate limit."
-        ),
-    )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="verbosity",
-        action="store_true",
-        default=False,
-        help="Increase logging verbosity.",
-    )
-    return parser.parse_args()
+
+    cli_args.add_slack_arg_group(parser, rss2slack.SLACK_BASE_URL)
+    args = parser.parse_args()
+    args.log_level = utils.calc_log_level(args.verbose)
+
+    cli_args.check_cache_expiration_arg(parser, args)
+    cli_args.check_sleep_arg(parser, args)
+    return args
+
+
+def process_news(
+    logger: logging.Logger,
+    cache: CachedData,
+    to_publish: Set[str],
+    sleep: int,
+    gh_data: GHRepoInfo,
+    slack_client,
+    slack_channel: str,
+):
+    """Process new items and post to Slack."""
+    for html_url in to_publish:
+        cache_item = cache.items[html_url]
+        try:
+            msg_blocks = [
+                format_message(
+                    logger,
+                    gh_data.repo_owner,
+                    gh_data.repo_name,
+                    ALIASES[gh_data.repo_section],
+                    html_url,
+                    cache_item,
+                )
+            ]
+            rss2slack.post_to_slack(
+                logger,
+                msg_blocks,
+                slack_client,
+                slack_channel,
+            )
+        except Exception:
+            logger.exception("Exception has occurred while posting to Slack")
+            cache.items.pop(html_url)
+        finally:
+            time.sleep(sleep)
 
 
 def process_page_items(
@@ -360,8 +349,7 @@ def scrub_items(logger: logging.Logger, cache: CachedData) -> None:
         try:
             expiration = int(cache.items[key]["expiration"])
         except (KeyError, ValueError):
-            logger.error("%s", traceback.format_exc())
-            logger.error(
+            logger.exception(
                 "Invalid cache entry will be removed: '%s'", cache.items[key]
             )
             cache.items.pop(key)
