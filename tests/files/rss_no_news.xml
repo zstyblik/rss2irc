@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Test Site - no news</title>
+    <link>https://www.example.com/</link>
+    <language>en-us</language>
+    <description>RSS without any news.</description>
+  </channel>
+</rss>

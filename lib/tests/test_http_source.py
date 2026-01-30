@@ -2,7 +2,7 @@
 """Unit tests for http_source.py."""
 import pytest
 
-from lib import HTTPSource  # noqa: I202
+from lib import HTTPSource
 
 
 @pytest.mark.parametrize(

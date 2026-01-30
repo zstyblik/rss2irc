@@ -13,6 +13,7 @@ from typing import Dict
 class HTTPSource:
     """Class represents HTTP data source."""
 
+    http_error_count: int = 0
     http_etag: str = field(default_factory=str)
     http_last_modified: str = field(default_factory=str)
     last_used_ts: int = 0
