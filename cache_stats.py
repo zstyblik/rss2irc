@@ -186,6 +186,7 @@ def parse_args() -> argparse.Namespace:
     )
     args = parser.parse_args()
     args.log_level = utils.calc_log_level(args.verbose)
+    args.log_level = min(args.log_level, logging.INFO)
 
     return args
 

@@ -13,7 +13,7 @@ from lib import CachedData
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
 
-def test_main_ideal(fixture_cache_file):
+def test_main_ideal(fixture_cache_file, caplog):
     """Simple run-through test."""
     rss_url = "https://example.com/rss"
 
@@ -32,6 +32,12 @@ def test_main_ideal(fixture_cache_file):
     source1.http_last_modified = ""
     source1.last_used_ts = int(time.time()) - 2 * 86400
     rss2irc.write_cache(cache, fixture_cache_file)
+
+    expected_log_tuple = (
+        "cache_stats",
+        20,
+        "Number of items in cache '{:s}' is 7.".format(fixture_cache_file),
+    )
 
     exception = None
     args = [
@@ -57,3 +63,4 @@ def test_main_ideal(fixture_cache_file):
     assert isinstance(exception, SystemExit) is True
     assert exception.code == 0
     assert out.getvalue().strip() == ""
+    assert expected_log_tuple in caplog.record_tuples
