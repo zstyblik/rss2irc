@@ -131,9 +131,18 @@ def main():
         args.cache_file,
         len(cache.items),
     )
+    print_cached_items_stats(logger, cache)
+    print_data_source_info(logger, cache)
+    logger.info("---")
+    logger.info("All done.")
+    sys.exit(0)
+
+
+def print_cached_items_stats(logger: logging.Logger, cache: CachedData) -> None:
+    """Printout stats about cached items."""
     if not cache.items:
-        logger.info("Nothing to do.")
-        sys.exit(0)
+        logger.debug("No items in cache - nothing to do.")
+        return
 
     ts_min, ts_max, error_cnt = get_timestamp_minmax(logger, cache)
     ts_diff = ts_max - ts_min
@@ -142,8 +151,10 @@ def main():
     logger.info("Diff timestamp %i", ts_diff)
     logger.info("Error count: %i", error_cnt)
     if ts_diff == 0:
+        logger.info("Cache distribution:")
+        logger.info("---")
         logger.info("%s:%s%%", (ts_min, ts_max), 100)
-        sys.exit(0)
+        return
 
     if ts_diff < 0:
         raise ValueError("Timestamp diff cannot be less than 0")
@@ -161,11 +172,6 @@ def main():
     for key, value in buckets.items():
         pct = round(value.count / item_cnt * 100, 1)
         logger.info("%s:%s%%", key, pct)
-
-    print_data_source_info(logger, cache)
-    logger.info("---")
-    logger.info("All done.")
-    sys.exit(0)
 
 
 def print_data_source_info(logger: logging.Logger, cache: CachedData) -> None:
