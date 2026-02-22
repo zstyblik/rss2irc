@@ -8,6 +8,7 @@ import logging
 import sys
 import traceback
 from dataclasses import dataclass
+from datetime import datetime
 
 import rss2irc
 from lib import CachedData
@@ -161,9 +162,33 @@ def main():
         pct = round(value.count / item_cnt * 100, 1)
         logger.info("%s:%s%%", key, pct)
 
+    print_data_source_info(logger, cache)
     logger.info("---")
     logger.info("All done.")
     sys.exit(0)
+
+
+def print_data_source_info(logger: logging.Logger, cache: CachedData) -> None:
+    """Printout information about data sources."""
+    if not cache.data_sources:
+        logger.debug("Cache has no data sources - nothing to printout.")
+        return
+
+    logger.info("---")
+    for data_source in cache.data_sources.values():
+        logger.info("Source URL: '%s'", data_source.url)
+        try:
+            last_used = datetime.fromtimestamp(data_source.last_used_ts)
+            last_used_formatted = last_used.strftime("%Y-%m-%d")
+        except Exception:
+            last_used_formatted = "error"
+            logger.exception(
+                "Failed to convert '%s' to datetime due to exception.",
+                data_source.last_used_ts,
+            )
+
+        logger.info("Last used: '%s'", last_used_formatted)
+        logger.info("Error count: '%s'", data_source.http_error_count)
 
 
 def parse_args() -> argparse.Namespace:
