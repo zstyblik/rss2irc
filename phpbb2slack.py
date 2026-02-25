@@ -224,11 +224,14 @@ def process_news(
 ):
     """Process news and post it to Slack."""
     for url in list(news.keys()):
-        msg_blocks = [format_message(url, news[url], handle)]
+        msg_block = format_message(url, news[url], handle)
+        msg_blocks = [msg_block]
+        msg_as_text = msg_block["text"]["text"]
         try:
             rss2slack.post_to_slack(
                 logger,
                 msg_blocks,
+                msg_as_text,
                 slack_client,
                 slack_channel,
             )

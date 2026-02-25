@@ -115,6 +115,10 @@ def test_main_ideal(
                 }
             ],
             "channel": expected_slack_channel,
+            "text": (
+                "[test] <http://www.example.com/scan.php?"
+                + "page=news_item&px=item1|Item1>"
+            ),
         },
         {
             "blocks": [
@@ -130,6 +134,10 @@ def test_main_ideal(
                 }
             ],
             "channel": expected_slack_channel,
+            "text": (
+                "[test] <http://www.example.com/scan.php?"
+                + "page=news_item&px=item2|Item2>"
+            ),
         },
     ]
     # Mock/set SLACK_TOKEN

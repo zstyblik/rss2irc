@@ -13,7 +13,7 @@ from typing import Dict
 from typing import List
 from typing import Tuple
 
-from slack import WebClient
+from slack_sdk import WebClient
 
 import rss2irc
 from lib import cli_args
@@ -174,14 +174,19 @@ def parse_args() -> argparse.Namespace:
 def post_to_slack(
     logger: logging.Logger,
     msg_blocks: List,
+    msg_as_text: str,
     slack_client: WebClient,
     slack_channel: str,
 ) -> None:
     """Post news to Slack channel."""
     try:
         logger.debug("Will post %s", repr(msg_blocks))
+        # NOTE(zstyblik): "we highly recommended that you include text to
+        # provide a fallback when using blocks."
         rsp = slack_client.chat_postMessage(
-            channel=slack_channel, blocks=msg_blocks
+            channel=slack_channel,
+            blocks=msg_blocks,
+            text=msg_as_text,
         )
         logger.debug("Response from Slack: %s", rsp)
         if not rsp:
@@ -208,11 +213,14 @@ def process_news(
 ) -> None:
     """Process news and post it to Slack."""
     for url in list(news.keys()):
-        msg_blocks = [format_message(url, news[url], handle)]
+        msg_block = format_message(url, news[url], handle)
+        msg_blocks = [msg_block]
+        msg_as_text = msg_block["text"]["text"]
         try:
             post_to_slack(
                 logger,
                 msg_blocks,
+                msg_as_text,
                 slack_client,
                 slack_channel,
             )

@@ -137,6 +137,11 @@ def test_main_ideal(
                 }
             ],
             "channel": expected_slack_channel,
+            "text": (
+                "[test] <https://phpbb.example.com/threads/"
+                + "something-of-something.424837/"
+                + "|Some other problem> (0)"
+            ),
         }
     ]
 
