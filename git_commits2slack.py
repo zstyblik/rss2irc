@@ -193,6 +193,7 @@ def main():
             args.git_web, branch_name, repo_name, commit_count
         )
         msg_blocks.insert(0, heading)
+        msg_as_text = heading["text"]["text"]
 
         slack_client = rss2slack.get_slack_web_client(
             slack_token, args.slack_base_url, args.slack_timeout
@@ -200,6 +201,7 @@ def main():
         rss2slack.post_to_slack(
             logger,
             msg_blocks,
+            msg_as_text,
             slack_client,
             args.slack_channel,
         )

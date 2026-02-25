@@ -273,19 +273,20 @@ def process_news(
     for html_url in to_publish:
         cache_item = cache.items[html_url]
         try:
-            msg_blocks = [
-                format_message(
-                    logger,
-                    gh_data.repo_owner,
-                    gh_data.repo_name,
-                    ALIASES[gh_data.repo_section],
-                    html_url,
-                    cache_item,
-                )
-            ]
+            msg_block = format_message(
+                logger,
+                gh_data.repo_owner,
+                gh_data.repo_name,
+                ALIASES[gh_data.repo_section],
+                html_url,
+                cache_item,
+            )
+            msg_blocks = [msg_block]
+            msg_as_text = msg_block["text"]["text"]
             rss2slack.post_to_slack(
                 logger,
                 msg_blocks,
+                msg_as_text,
                 slack_client,
                 slack_channel,
             )

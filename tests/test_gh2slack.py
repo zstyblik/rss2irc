@@ -261,6 +261,11 @@ def test_main_ideal(
                 }
             ],
             "channel": expected_slack_channel,
+            "text": (
+                "[<https://github.com/test-user/test-repo|"
+                + "test-user/test-repo>] <http://example.com/bar|"
+                + "pr#1> | some title#2"
+            ),
         },
         {
             "blocks": [
@@ -277,6 +282,11 @@ def test_main_ideal(
                 }
             ],
             "channel": expected_slack_channel,
+            "text": (
+                "[<https://github.com/test-user/test-repo|"
+                + "test-user/test-repo>] "
+                + "<http://example.com/foo|pr#0> | some title#1"
+            ),
         },
     ]
     #

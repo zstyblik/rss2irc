@@ -340,6 +340,10 @@ def test_main_ideal(
                 },
             ],
             "channel": expected_slack_channel,
+            "text": (
+                "<http://example.com/tree/master|"
+                + "[{}:master]> 1 commit".format(repo_name)
+            ),
         }
     ]
     #
