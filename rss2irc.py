@@ -327,6 +327,11 @@ def write_data(
         for url in list(data.keys()):
             message = format_message(url, data[url], handle)
             try:
+                fhandle_stat = os.fstat(fhandle.fileno())
+                is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
+                if not is_fifo:
+                    raise ValueError("fhandle is expected to be a FIFO pipe")
+
                 write_message(logger, fhandle, message)
                 time.sleep(sleep)
             except (TimeoutError, ValueError):
@@ -349,14 +354,8 @@ def write_message(
     signal.signal(signal.SIGALRM, signal_handler)
     signal.alarm(config_options.PIPE_WRITE_TIMEOUT)
     try:
-        fhandle_stat = os.fstat(fhandle.fileno())
-        is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
-        if not is_fifo:
-            raise ValueError("fhandle is expected to be a FIFO pipe")
-
         logger.debug("Will write %s", repr(message))
         fhandle.write(message.encode("utf-8"))
-        signal.alarm(0)
     except Exception as exception:
         raise exception
     finally:
