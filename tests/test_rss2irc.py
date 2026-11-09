@@ -10,12 +10,12 @@ from unittest.mock import patch
 
 import pytest
 
-import rss2irc
-from lib import CachedData
-from lib import config_options
-from lib.exceptions import CacheReadError
-from lib.exceptions import CacheWriteError
-from lib.exceptions import EmptyResponseError
+from rss2irc import rss2irc
+from rss2irc.lib import CachedData
+from rss2irc.lib import config_options
+from rss2irc.lib.exceptions import CacheReadError
+from rss2irc.lib.exceptions import CacheWriteError
+from rss2irc.lib.exceptions import EmptyResponseError
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -44,7 +44,7 @@ def test_format_message(url, msg_attrs, handle, expected):
     assert result == expected
 
 
-@patch("rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
 def test_main_ideal(
     mock_s_isfifo, fixture_http_server, fixture_cache_file, fixture_output_file
 ):
@@ -143,8 +143,8 @@ def test_main_ideal(
     assert sorted(output) == sorted(expected_output)
 
 
-@patch("rss2irc.stat.S_ISFIFO")
-@patch("rss2irc.time.time")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.time.time")
 def test_main_cache_operations(
     mock_time,
     mock_s_isfifo,
@@ -257,9 +257,9 @@ def test_main_cache_operations(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_cache_read_error(
     mock_path_exists,
     mock_read_cache,
@@ -320,7 +320,7 @@ def test_main_cache_read_error(
     assert caplog.record_tuples == expected_log_records
 
 
-@patch("rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
 def test_main_cache_hit(
     mock_s_isfifo,
     fixture_mock_requests,
@@ -418,10 +418,10 @@ def test_main_cache_hit(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.get_rss")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.get_rss")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_empty_response_error(
     mock_path_exists,
     mock_read_cache,
@@ -507,10 +507,10 @@ def test_main_empty_response_error(
         (["--return-error"], 0),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.get_rss")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.get_rss")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_no_news_error(
     mock_path_exists,
     mock_read_cache,
@@ -603,10 +603,10 @@ def test_main_no_news_error(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.get_rss")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.get_rss")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_random_exception(
     mock_path_exists,
     mock_read_cache,
@@ -692,9 +692,9 @@ def test_main_random_exception(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.stat.S_ISFIFO")
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.read_cache")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.read_cache")
 def test_main_wrap_write_cache_error(
     mock_read_cache,
     mock_wrap_write_cache,
@@ -828,7 +828,7 @@ def test_scrub_items():
     assert test_cache.items == expected
 
 
-@patch("rss2irc.time.time")
+@patch("rss2irc.rss2irc.time.time")
 def test_update_items_expiration_cache_items_as_news(mock_time):
     """Test that it's possible to self-update TTL of cached items."""
     mock_timestamp = 1717428210
@@ -856,7 +856,7 @@ def test_wrap_write_cache(fixture_cache_file):
     assert result == 0
 
 
-@patch("rss2irc.write_cache")
+@patch("rss2irc.rss2irc.write_cache")
 def test_wrap_write_cache_exception(mock_write_cache, caplog):
     """Test exception handling in wrap_write_cache_exception()."""
     expected_record = (

@@ -2,7 +2,7 @@
 """Unit tests for utils.py."""
 import pytest
 
-from lib import utils
+from rss2irc.lib import utils
 
 
 @pytest.mark.parametrize(

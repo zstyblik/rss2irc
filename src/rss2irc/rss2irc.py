@@ -19,15 +19,15 @@ from typing import Tuple
 import feedparser
 import requests
 
-from lib import CachedData
-from lib import cli_args
-from lib import config_options
-from lib import utils
-from lib.exceptions import CacheReadError
-from lib.exceptions import CacheWriteError
-from lib.exceptions import EmptyResponseError
-from lib.exceptions import NoNewsError
-from lib.exceptions import NotModifiedError
+from rss2irc.lib import CachedData
+from rss2irc.lib import cli_args
+from rss2irc.lib import config_options
+from rss2irc.lib import utils
+from rss2irc.lib.exceptions import CacheReadError
+from rss2irc.lib.exceptions import CacheWriteError
+from rss2irc.lib.exceptions import EmptyResponseError
+from rss2irc.lib.exceptions import NoNewsError
+from rss2irc.lib.exceptions import NotModifiedError
 
 
 def format_message(

@@ -9,12 +9,12 @@ from unittest.mock import patch
 
 import pytest
 
-import phpbb2slack
-import rss2irc
-from lib import CachedData
-from lib import config_options
-from lib.exceptions import CacheReadError
-from lib.exceptions import EmptyResponseError
+from rss2irc import phpbb2slack
+from rss2irc import rss2irc
+from rss2irc.lib import CachedData
+from rss2irc.lib import config_options
+from rss2irc.lib.exceptions import CacheReadError
+from rss2irc.lib.exceptions import EmptyResponseError
 
 ITEM_EXPIRATION = int(time.time())
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -364,8 +364,8 @@ def test_main_cache_hit(
         (["--return-error"], 1),
     ],
 )
-@patch("phpbb2slack.rss2irc.wrap_write_cache")
-@patch("phpbb2slack.rss2irc.read_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.read_cache")
 def test_main_slack_token_error(
     mock_read_cache,
     mock_wrap_write_cache,
@@ -439,8 +439,8 @@ def test_main_slack_token_error(
         (["--return-error"], 1),
     ],
 )
-@patch("phpbb2slack.rss2irc.wrap_write_cache")
-@patch("phpbb2slack.rss2irc.read_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.read_cache")
 def test_main_cache_read_error(
     mock_read_cache,
     mock_wrap_write_cache,
@@ -513,9 +513,9 @@ def test_main_cache_read_error(
         (["--return-error"], 1),
     ],
 )
-@patch("phpbb2slack.rss2irc.wrap_write_cache")
-@patch("phpbb2slack.rss2irc.get_rss")
-@patch("phpbb2slack.rss2irc.read_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.get_rss")
+@patch("rss2irc.phpbb2slack.rss2irc.read_cache")
 def test_main_empty_response_error(
     mock_read_cache,
     mock_get_rss,
@@ -629,8 +629,8 @@ def test_main_empty_response_error(
         (["--return-error"], 0),
     ],
 )
-@patch("phpbb2slack.rss2irc.wrap_write_cache")
-@patch("phpbb2slack.rss2irc.read_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.read_cache")
 def test_main_no_news_error(
     mock_read_cache,
     mock_wrap_write_cache,
@@ -749,9 +749,9 @@ def test_main_no_news_error(
         (["--return-error"], 1),
     ],
 )
-@patch("phpbb2slack.rss2irc.wrap_write_cache")
-@patch("phpbb2slack.rss2slack.get_slack_token")
-@patch("phpbb2slack.rss2irc.read_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.phpbb2slack.rss2slack.get_slack_token")
+@patch("rss2irc.phpbb2slack.rss2irc.read_cache")
 def test_main_random_exception(
     mock_read_cache,
     mock_get_slack_token,
@@ -832,8 +832,8 @@ def test_main_random_exception(
         (["--return-error"], 1),
     ],
 )
-@patch("phpbb2slack.rss2irc.wrap_write_cache")
-@patch("phpbb2slack.rss2irc.read_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.phpbb2slack.rss2irc.read_cache")
 def test_main_wrap_write_cache_error(
     mock_read_cache,
     mock_wrap_write_cache,
@@ -1021,7 +1021,7 @@ def test_scrub_items(cache, expected_cache):
         )
     ],
 )
-@patch("phpbb2slack.time.time")
+@patch("rss2irc.phpbb2slack.time.time")
 def test_update_items_expiration(
     mock_time, news, cache, expected_cache, item_expiration
 ):

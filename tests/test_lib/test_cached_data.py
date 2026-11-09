@@ -3,12 +3,12 @@
 import time
 from unittest.mock import patch
 
-from lib import CachedData
-from lib import config_options
-from lib import HTTPSource  # noqa: I100
+from rss2irc.lib import CachedData
+from rss2irc.lib import config_options
+from rss2irc.lib import HTTPSource  # noqa: I100
 
 
-@patch("lib.cached_data.time.time")
+@patch("rss2irc.lib.cached_data.time.time")
 def test_cache_get_source_by_url(mock_time):
     """Test that CachedData.get_source_by_url() sets last_used_ts attr."""
     mock_time.return_value = 1717428213
@@ -27,7 +27,7 @@ def test_cache_get_source_by_url(mock_time):
     assert result.last_used_ts == 1717428213
 
 
-@patch("lib.cached_data.time.time")
+@patch("rss2irc.lib.cached_data.time.time")
 def test_cache_get_source_by_url_create_source(mock_time):
     """Test that CachedData.get_source_by_url() creates new source."""
     mock_time.return_value = 1717428214

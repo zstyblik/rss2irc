@@ -15,13 +15,13 @@ from typing import Tuple
 
 from slack_sdk import WebClient
 
-import rss2irc
-from lib import cli_args
-from lib import utils
-from lib.exceptions import EmptyResponseError
-from lib.exceptions import NoNewsError
-from lib.exceptions import NotModifiedError
-from lib.exceptions import SlackTokenError
+from rss2irc import rss2irc
+from rss2irc.lib import cli_args
+from rss2irc.lib import utils
+from rss2irc.lib.exceptions import EmptyResponseError
+from rss2irc.lib.exceptions import NoNewsError
+from rss2irc.lib.exceptions import NotModifiedError
+from rss2irc.lib.exceptions import SlackTokenError
 
 SLACK_BASE_URL = WebClient.BASE_URL
 
