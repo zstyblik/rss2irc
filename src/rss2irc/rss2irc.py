@@ -356,6 +356,7 @@ def write_message(
     try:
         logger.debug("Will write %s", repr(message))
         fhandle.write(message.encode("utf-8"))
+        fhandle.flush()
     except Exception as exception:
         raise exception
     finally:
