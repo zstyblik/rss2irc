@@ -27,6 +27,7 @@ from rss2irc.lib.exceptions import CacheReadError
 from rss2irc.lib.exceptions import CacheWriteError
 from rss2irc.lib.exceptions import EmptyResponseError
 from rss2irc.lib.exceptions import NoNewsError
+from rss2irc.lib.exceptions import NotFIFO
 from rss2irc.lib.exceptions import NotModifiedError
 
 
@@ -145,6 +146,13 @@ def main():
         update_items_expiration(cache, cache.items, args.cache_expiration)
         # NOTE(zstyblik): leave source.http_error_count unchanged
         retcode = 0
+    except NotFIFO:
+        logger.error("Ouput '%s' is not a FIFO pipe.", args.output)
+        # NOTE(zstyblik): some news might be lost in between runs, because ETag
+        # gets updated.
+        update_items_expiration(cache, cache.items, args.cache_expiration)
+        source.http_error_count = 0
+        retcode = 1
     except Exception:
         logger.exception("Unexpected exception has occurred.")
         source.http_error_count += 1
@@ -324,14 +332,14 @@ def write_data(
     signal.alarm(config_options.PIPE_OPEN_TIMEOUT)
     with open(output, "wb") as fhandle:
         signal.alarm(0)
+        fhandle_stat = os.fstat(fhandle.fileno())
+        is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
+        if not is_fifo:
+            raise NotFIFO("fhandle is expected to be a FIFO pipe")
+
         for url in list(data.keys()):
             message = format_message(url, data[url], handle)
             try:
-                fhandle_stat = os.fstat(fhandle.fileno())
-                is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
-                if not is_fifo:
-                    raise ValueError("fhandle is expected to be a FIFO pipe")
-
                 write_message(logger, fhandle, message)
                 time.sleep(sleep)
             except (TimeoutError, ValueError):

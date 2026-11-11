@@ -22,6 +22,10 @@ class NoNewsError(RSS2IRCBaseException):
     """Raised when RSS has no news."""
 
 
+class NotFIFO(RSS2IRCBaseException):
+    """Raised when file descriptor is not a FIFO."""
+
+
 class NotModifiedError(RSS2IRCBaseException):
     """Raised when HTTP content has not changed."""
 
