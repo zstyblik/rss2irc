@@ -514,7 +514,7 @@ def test_main_cache_read_error(
     ],
 )
 @patch("rss2irc.phpbb2slack.rss2irc.wrap_write_cache")
-@patch("rss2irc.phpbb2slack.rss2irc.get_rss")
+@patch("rss2irc.phpbb2slack.utils.get_rss")
 @patch("rss2irc.phpbb2slack.rss2irc.read_cache")
 def test_main_empty_response_error(
     mock_read_cache,

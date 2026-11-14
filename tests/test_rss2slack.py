@@ -493,7 +493,7 @@ def test_main_cache_hit(
     ],
 )
 @patch("rss2irc.rss2slack.rss2irc.wrap_write_cache")
-@patch("rss2irc.rss2slack.rss2irc.get_rss")
+@patch("rss2irc.rss2slack.utils.get_rss")
 @patch("rss2irc.rss2slack.rss2irc.read_cache")
 def test_main_empty_response_error(
     mock_read_cache,
@@ -586,7 +586,7 @@ def test_main_empty_response_error(
     ],
 )
 @patch("rss2irc.rss2slack.rss2irc.wrap_write_cache")
-@patch("rss2irc.rss2slack.rss2irc.get_rss")
+@patch("rss2irc.rss2slack.utils.get_rss")
 @patch("rss2irc.rss2slack.rss2irc.read_cache")
 def test_main_no_news_error(
     mock_read_cache,
@@ -782,7 +782,7 @@ def test_main_random_exception(
     ],
 )
 @patch("rss2irc.rss2slack.rss2irc.wrap_write_cache")
-@patch("rss2irc.rss2slack.rss2irc.get_rss")
+@patch("rss2irc.rss2slack.utils.get_rss")
 @patch("rss2irc.rss2slack.rss2irc.read_cache")
 def test_main_wrap_write_cache_error(
     mock_read_cache,

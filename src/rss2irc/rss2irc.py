@@ -17,7 +17,6 @@ from typing import Dict
 from typing import Tuple
 
 import feedparser
-import requests
 
 from rss2irc.lib import CachedData
 from rss2irc.lib import cli_args
@@ -51,44 +50,6 @@ def format_message(
     return "[{:s}] {:s} | {:s}\n".format(tag, msg_attrs[0], url)
 
 
-def get_rss(
-    logger: logging.Logger,
-    url: str,
-    timeout: int = config_options.HTTP_TIMEOUT,
-    extra_headers: Dict = None,
-) -> requests.models.Response:
-    """Return body of given URL as a string.
-
-    :raises EmptyResponseError: raised when HTTP rsp body is empty
-    :raises NotModifiedError: raised when HTTP Status Code is 304
-    :raises requests.exceptions.BaseHTTPError: raised when HTTP error occurs
-    """
-    # Randomize user agent, because CF likes to block for no apparent reason.
-    user_agent = "rss2irc-script"
-    headers = {
-        "User-Agent": user_agent,
-        "Accept": (
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        ),
-    }
-    if extra_headers:
-        for key, value in extra_headers.items():
-            headers[key] = value
-
-    logger.debug("Make request at URL '%s'.", url)
-    rsp = requests.get(url, timeout=timeout, headers=headers)
-    logger.debug("Got HTTP Status Code '%i'.", rsp.status_code)
-    rsp.raise_for_status()
-
-    if rsp.status_code == 304:
-        raise NotModifiedError
-
-    if not rsp.text:
-        raise EmptyResponseError
-
-    return rsp
-
-
 def main():
     """Fetch RSS feed and post RSS news to IRC."""
     args = parse_args()
@@ -108,7 +69,7 @@ def main():
 
     source = cache.get_source_by_url(args.rss_url)
     try:
-        rsp = get_rss(
+        rsp = utils.get_rss(
             logger,
             args.rss_url,
             args.rss_http_timeout,

@@ -420,7 +420,7 @@ def test_main_cache_hit(
     ],
 )
 @patch("rss2irc.rss2irc.wrap_write_cache")
-@patch("rss2irc.rss2irc.get_rss")
+@patch("rss2irc.rss2irc.utils.get_rss")
 @patch("rss2irc.rss2irc.read_cache")
 @patch("rss2irc.rss2irc.os.path.exists")
 def test_main_empty_response_error(
@@ -509,7 +509,7 @@ def test_main_empty_response_error(
     ],
 )
 @patch("rss2irc.rss2irc.wrap_write_cache")
-@patch("rss2irc.rss2irc.get_rss")
+@patch("rss2irc.rss2irc.utils.get_rss")
 @patch("rss2irc.rss2irc.read_cache")
 @patch("rss2irc.rss2irc.os.path.exists")
 def test_main_no_news_error(
@@ -712,7 +712,7 @@ def test_main_not_fifo_error(
     ],
 )
 @patch("rss2irc.rss2irc.wrap_write_cache")
-@patch("rss2irc.rss2irc.get_rss")
+@patch("rss2irc.rss2irc.utils.get_rss")
 @patch("rss2irc.rss2irc.read_cache")
 @patch("rss2irc.rss2irc.os.path.exists")
 def test_main_random_exception(

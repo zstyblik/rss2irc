@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """Utility functions used in rss2irc."""
+import logging
+from typing import Dict
+
+import requests
+
+from .config_options import HTTP_TIMEOUT
+from .exceptions import EmptyResponseError
+from .exceptions import NotModifiedError
 
 
 def calc_log_level(count: int) -> int:
@@ -16,6 +24,44 @@ def escalate_retcode(new_rc: int, old_rc: int) -> int:
         retcode = new_rc
 
     return retcode
+
+
+def get_rss(
+    logger: logging.Logger,
+    url: str,
+    timeout: int = HTTP_TIMEOUT,
+    extra_headers: Dict = None,
+) -> requests.models.Response:
+    """Return body of given URL as a string.
+
+    :raises EmptyResponseError: raised when HTTP rsp body is empty
+    :raises NotModifiedError: raised when HTTP Status Code is 304
+    :raises requests.exceptions.BaseHTTPError: raised when HTTP error occurs
+    """
+    # Randomize user agent, because CF likes to block for no apparent reason.
+    user_agent = "rss2irc-script"
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        ),
+    }
+    if extra_headers:
+        for key, value in extra_headers.items():
+            headers[key] = value
+
+    logger.debug("Make request at URL '%s'.", url)
+    rsp = requests.get(url, timeout=timeout, headers=headers)
+    logger.debug("Got HTTP Status Code '%i'.", rsp.status_code)
+    rsp.raise_for_status()
+
+    if rsp.status_code == 304:
+        raise NotModifiedError
+
+    if not rsp.text:
+        raise EmptyResponseError
+
+    return rsp
 
 
 def mask_retcode(retcode: int, mask: bool) -> int:

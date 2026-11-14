@@ -91,7 +91,7 @@ def main():
         slack_token = rss2slack.get_slack_token()
         authors = get_authors_from_file(logger, args.authors_file)
 
-        rsp = rss2irc.get_rss(
+        rsp = utils.get_rss(
             logger,
             args.rss_url,
             args.rss_http_timeout,

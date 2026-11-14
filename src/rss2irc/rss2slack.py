@@ -87,7 +87,7 @@ def main():
     try:
         slack_token = get_slack_token()
 
-        rsp = rss2irc.get_rss(
+        rsp = utils.get_rss(
             logger,
             args.rss_url,
             args.rss_http_timeout,
