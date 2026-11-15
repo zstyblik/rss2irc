@@ -17,17 +17,17 @@ from typing import Dict
 from typing import Tuple
 
 import feedparser
-import requests
 
-from lib import CachedData
-from lib import cli_args
-from lib import config_options
-from lib import utils
-from lib.exceptions import CacheReadError
-from lib.exceptions import CacheWriteError
-from lib.exceptions import EmptyResponseError
-from lib.exceptions import NoNewsError
-from lib.exceptions import NotModifiedError
+from rss2irc.lib import CachedData
+from rss2irc.lib import cli_args
+from rss2irc.lib import config_options
+from rss2irc.lib import utils
+from rss2irc.lib.exceptions import CacheReadError
+from rss2irc.lib.exceptions import CacheWriteError
+from rss2irc.lib.exceptions import EmptyResponseError
+from rss2irc.lib.exceptions import NoNewsError
+from rss2irc.lib.exceptions import NotFIFO
+from rss2irc.lib.exceptions import NotModifiedError
 
 
 def format_message(
@@ -50,44 +50,6 @@ def format_message(
     return "[{:s}] {:s} | {:s}\n".format(tag, msg_attrs[0], url)
 
 
-def get_rss(
-    logger: logging.Logger,
-    url: str,
-    timeout: int = config_options.HTTP_TIMEOUT,
-    extra_headers: Dict = None,
-) -> requests.models.Response:
-    """Return body of given URL as a string.
-
-    :raises EmptyResponseError: raised when HTTP rsp body is empty
-    :raises NotModifiedError: raised when HTTP Status Code is 304
-    :raises requests.exceptions.BaseHTTPError: raised when HTTP error occurs
-    """
-    # Randomize user agent, because CF likes to block for no apparent reason.
-    user_agent = "rss2irc-script"
-    headers = {
-        "User-Agent": user_agent,
-        "Accept": (
-            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        ),
-    }
-    if extra_headers:
-        for key, value in extra_headers.items():
-            headers[key] = value
-
-    logger.debug("Make request at URL '%s'.", url)
-    rsp = requests.get(url, timeout=timeout, headers=headers)
-    logger.debug("Got HTTP Status Code '%i'.", rsp.status_code)
-    rsp.raise_for_status()
-
-    if rsp.status_code == 304:
-        raise NotModifiedError
-
-    if not rsp.text:
-        raise EmptyResponseError
-
-    return rsp
-
-
 def main():
     """Fetch RSS feed and post RSS news to IRC."""
     args = parse_args()
@@ -107,8 +69,7 @@ def main():
 
     source = cache.get_source_by_url(args.rss_url)
     try:
-        rsp = get_rss(
-            logger,
+        rsp = utils.get_rss(
             args.rss_url,
             args.rss_http_timeout,
             source.make_caching_headers(),
@@ -145,6 +106,13 @@ def main():
         update_items_expiration(cache, cache.items, args.cache_expiration)
         # NOTE(zstyblik): leave source.http_error_count unchanged
         retcode = 0
+    except NotFIFO:
+        logger.error("Ouput '%s' is not a FIFO pipe.", args.output)
+        # NOTE(zstyblik): some news might be lost in between runs, because ETag
+        # gets updated.
+        update_items_expiration(cache, cache.items, args.cache_expiration)
+        source.http_error_count = 0
+        retcode = 1
     except Exception:
         logger.exception("Unexpected exception has occurred.")
         source.http_error_count += 1
@@ -324,14 +292,14 @@ def write_data(
     signal.alarm(config_options.PIPE_OPEN_TIMEOUT)
     with open(output, "wb") as fhandle:
         signal.alarm(0)
+        fhandle_stat = os.fstat(fhandle.fileno())
+        is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
+        if not is_fifo:
+            raise NotFIFO("fhandle is expected to be a FIFO pipe")
+
         for url in list(data.keys()):
             message = format_message(url, data[url], handle)
             try:
-                fhandle_stat = os.fstat(fhandle.fileno())
-                is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
-                if not is_fifo:
-                    raise ValueError("fhandle is expected to be a FIFO pipe")
-
                 write_message(logger, fhandle, message)
                 time.sleep(sleep)
             except (TimeoutError, ValueError):
@@ -356,6 +324,7 @@ def write_message(
     try:
         logger.debug("Will write %s", repr(message))
         fhandle.write(message.encode("utf-8"))
+        fhandle.flush()
     except Exception as exception:
         raise exception
     finally:

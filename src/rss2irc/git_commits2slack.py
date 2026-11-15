@@ -15,10 +15,10 @@ import sys
 from typing import Dict
 from typing import List
 
-import rss2slack
-from lib import cli_args
-from lib import utils
-from lib.exceptions import SlackTokenError
+from rss2irc import rss2slack
+from rss2irc.lib import cli_args
+from rss2irc.lib import utils
+from rss2irc.lib.exceptions import SlackTokenError
 
 RE_GIT_AUTD = re.compile(r"^Already up-to-date.$")
 RE_GIT_UPDATING = re.compile(r"^Updating [a-z0-9]+", re.I)

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools >=64", "setuptools_scm[toml] >=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rss2irc"
+authors = [
+    {name = "Zdenek Styblik"},
+]
+description = "Set of scripts to push data to IRC/Slack channels"
+readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICEN[CS]E*"]
+requires-python = ">=3.11"
+keywords = ["ii", "irc", "irc-bot", "phpbb", "rss", "rss-feed-parser", "slack"]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+dynamic = ["dependencies", "version"]
+
+[project.scripts]
+cache_stats = "rss2irc.cache_stats:main"
+gh2slack = "rss2irc.gh2slack:main"
+git_commits2slack = "rss2irc.git_commits2slack:main"
+phpbb2slack = "rss2irc.phpbb2slack:main"
+rss2irc = "rss2irc.rss2irc:main"
+rss2slack = "rss2irc.rss2slack:main"
+
+[project.urls]
+Repository = "https://github.com/zstyblik/rss2irc.git"
+Issues = "https://github.com/zstyblik/rss2irc/issues"
+
+[tool.black]
+line-length = 80
+target-version = ["py311"]
+include = '\.pyi?$'
+unstable = false
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools_scm]
+# Nothing so far.

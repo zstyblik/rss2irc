@@ -16,13 +16,13 @@ from typing import Set
 
 import requests
 
-import rss2irc
-import rss2slack
-from lib import CachedData
-from lib import cli_args
-from lib import config_options
-from lib import utils
-from lib.exceptions import SlackTokenError
+from rss2irc import rss2irc
+from rss2irc import rss2slack
+from rss2irc.lib import CachedData
+from rss2irc.lib import cli_args
+from rss2irc.lib import config_options
+from rss2irc.lib import utils
+from rss2irc.lib.exceptions import SlackTokenError
 
 ALIASES = {
     "issues": "issue",

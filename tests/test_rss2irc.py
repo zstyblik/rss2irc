@@ -10,12 +10,13 @@ from unittest.mock import patch
 
 import pytest
 
-import rss2irc
-from lib import CachedData
-from lib import config_options
-from lib.exceptions import CacheReadError
-from lib.exceptions import CacheWriteError
-from lib.exceptions import EmptyResponseError
+from rss2irc import rss2irc
+from rss2irc.lib import CachedData
+from rss2irc.lib import config_options
+from rss2irc.lib.exceptions import CacheReadError
+from rss2irc.lib.exceptions import CacheWriteError
+from rss2irc.lib.exceptions import EmptyResponseError
+from rss2irc.lib.exceptions import NotFIFO
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -44,7 +45,7 @@ def test_format_message(url, msg_attrs, handle, expected):
     assert result == expected
 
 
-@patch("rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
 def test_main_ideal(
     mock_s_isfifo, fixture_http_server, fixture_cache_file, fixture_output_file
 ):
@@ -143,8 +144,8 @@ def test_main_ideal(
     assert sorted(output) == sorted(expected_output)
 
 
-@patch("rss2irc.stat.S_ISFIFO")
-@patch("rss2irc.time.time")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.time.time")
 def test_main_cache_operations(
     mock_time,
     mock_s_isfifo,
@@ -257,9 +258,9 @@ def test_main_cache_operations(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_cache_read_error(
     mock_path_exists,
     mock_read_cache,
@@ -320,7 +321,7 @@ def test_main_cache_read_error(
     assert caplog.record_tuples == expected_log_records
 
 
-@patch("rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
 def test_main_cache_hit(
     mock_s_isfifo,
     fixture_mock_requests,
@@ -418,10 +419,10 @@ def test_main_cache_hit(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.get_rss")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.utils.get_rss")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_empty_response_error(
     mock_path_exists,
     mock_read_cache,
@@ -507,10 +508,10 @@ def test_main_empty_response_error(
         (["--return-error"], 0),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.get_rss")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.utils.get_rss")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_no_news_error(
     mock_path_exists,
     mock_read_cache,
@@ -603,10 +604,117 @@ def test_main_no_news_error(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.get_rss")
-@patch("rss2irc.read_cache")
-@patch("rss2irc.os.path.exists")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.write_data")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
+def test_main_not_fifo_error(
+    mock_path_exists,
+    mock_read_cache,
+    mock_write_data,
+    mock_wrap_write_cache,
+    fixture_mock_requests,
+    extra_args,
+    expected_retcode,
+    caplog,
+):
+    """Test that NotFIFO is handled as expected."""
+    expected_log_records = [
+        (
+            "rss2irc",
+            40,
+            "Ouput '/fake/path/output' is not a FIFO pipe.",
+        ),
+    ]
+    handle = "test"
+    http_timeout = "10"
+    rss_url = "http://127.0.0.2:49991"
+    fixture_cache_file = "/fake/path/cache.file"
+    fixture_output_file = "/fake/path/output"
+    frozen_ts = int(time.time())
+
+    cache = CachedData()
+    cache.items["http://example.com"] = frozen_ts + 60
+    cache.items["https://expired.example.com"] = frozen_ts + 60
+    source1 = cache.get_source_by_url(rss_url)
+    source1.http_error_count = 10
+    source1.http_etag = ""
+    source1.http_last_modified = ""
+    source1.last_used_ts = frozen_ts - 300
+
+    mock_path_exists.return_value = True
+    mock_read_cache.return_value = cache
+    mock_rss_fname = os.path.join(SCRIPT_PATH, "files", "rss.xml")
+    with open(mock_rss_fname, "r", encoding="utf-8") as fhandle:
+        mock_http_rss = fixture_mock_requests.get(
+            rss_url,
+            status_code=200,
+            text=fhandle.read(),
+            headers={
+                "ETag": "pytest_etag",
+                "Last-Modified": "pytest_last_modified",
+            },
+        )
+
+    mock_write_data.side_effect = NotFIFO("not a FIFO")
+    mock_wrap_write_cache.return_value = 0
+
+    args = [
+        "./rss2irc.py",
+        "-vv",
+        "--rss-url",
+        rss_url,
+        "--rss-http-timeout",
+        http_timeout,
+        "--handle",
+        handle,
+        "--cache",
+        fixture_cache_file,
+        "--output",
+        fixture_output_file,
+    ] + extra_args
+
+    print("URL: {:s}".format(rss_url))
+    print("Handle: {:s}".format(handle))
+    print("Cache file: {:s}".format(fixture_cache_file))
+    print("Output file: {:s}".format(fixture_output_file))
+
+    exception = None
+    with patch.object(sys, "argv", args):
+        try:
+            rss2irc.main()
+        except SystemExit as sys_exit:
+            exception = sys_exit
+
+    assert isinstance(exception, SystemExit) is True
+    assert exception.code == expected_retcode
+    mock_read_cache.assert_called_once()
+    mock_wrap_write_cache.assert_called_once()
+    assert caplog.record_tuples == expected_log_records
+    # Check HTTP call
+    assert mock_http_rss.called is True
+    assert mock_http_rss.call_count == 1
+    assert mock_http_rss.last_request.text is None
+    # Check cache
+    assert source1.http_error_count == 0
+    # NOTE(zstyblik): check that we have all items and expiration has been
+    # updated.
+    assert len(cache.items) == 2
+    for key in cache.items:
+        assert cache.items[key] > frozen_ts + 180
+
+
+@pytest.mark.parametrize(
+    "extra_args,expected_retcode",
+    [
+        ([], 0),
+        (["--return-error"], 1),
+    ],
+)
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.utils.get_rss")
+@patch("rss2irc.rss2irc.read_cache")
+@patch("rss2irc.rss2irc.os.path.exists")
 def test_main_random_exception(
     mock_path_exists,
     mock_read_cache,
@@ -692,9 +800,9 @@ def test_main_random_exception(
         (["--return-error"], 1),
     ],
 )
-@patch("rss2irc.stat.S_ISFIFO")
-@patch("rss2irc.wrap_write_cache")
-@patch("rss2irc.read_cache")
+@patch("rss2irc.rss2irc.stat.S_ISFIFO")
+@patch("rss2irc.rss2irc.wrap_write_cache")
+@patch("rss2irc.rss2irc.read_cache")
 def test_main_wrap_write_cache_error(
     mock_read_cache,
     mock_wrap_write_cache,
@@ -828,7 +936,7 @@ def test_scrub_items():
     assert test_cache.items == expected
 
 
-@patch("rss2irc.time.time")
+@patch("rss2irc.rss2irc.time.time")
 def test_update_items_expiration_cache_items_as_news(mock_time):
     """Test that it's possible to self-update TTL of cached items."""
     mock_timestamp = 1717428210
@@ -856,7 +964,7 @@ def test_wrap_write_cache(fixture_cache_file):
     assert result == 0
 
 
-@patch("rss2irc.write_cache")
+@patch("rss2irc.rss2irc.write_cache")
 def test_wrap_write_cache_exception(mock_write_cache, caplog):
     """Test exception handling in wrap_write_cache_exception()."""
     expected_record = (

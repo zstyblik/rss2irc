@@ -8,9 +8,9 @@ import time
 from datetime import datetime
 from unittest.mock import patch
 
-import cache_stats
-import rss2irc
-from lib import CachedData
+from rss2irc import cache_stats
+from rss2irc import rss2irc
+from rss2irc.lib import CachedData
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 

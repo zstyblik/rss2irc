@@ -7,7 +7,7 @@ cd "$(dirname "${0}")/.."
 python3 -m flake8 \
     . \
     --ignore=W503 \
-    --application-import-names="cache_stats,gh2slack,git_commits2slack,phpbb2slack,rss2irc,rss2slack,lib" \
+    --application-import-names="rss2irc" \
     --import-order-style=pycharm \
     --max-line-length=80 \
     --show-source \

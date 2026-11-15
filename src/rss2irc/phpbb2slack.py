@@ -12,16 +12,16 @@ from typing import List
 
 import feedparser
 
-import rss2irc
-import rss2slack
-from lib import CachedData
-from lib import cli_args
-from lib import config_options
-from lib import utils
-from lib.exceptions import EmptyResponseError
-from lib.exceptions import NoNewsError
-from lib.exceptions import NotModifiedError
-from lib.exceptions import SlackTokenError
+from rss2irc import rss2irc
+from rss2irc import rss2slack
+from rss2irc.lib import CachedData
+from rss2irc.lib import cli_args
+from rss2irc.lib import config_options
+from rss2irc.lib import utils
+from rss2irc.lib.exceptions import EmptyResponseError
+from rss2irc.lib.exceptions import NoNewsError
+from rss2irc.lib.exceptions import NotModifiedError
+from rss2irc.lib.exceptions import SlackTokenError
 
 
 def format_message(
@@ -91,8 +91,7 @@ def main():
         slack_token = rss2slack.get_slack_token()
         authors = get_authors_from_file(logger, args.authors_file)
 
-        rsp = rss2irc.get_rss(
-            logger,
+        rsp = utils.get_rss(
             args.rss_url,
             args.rss_http_timeout,
             source.make_caching_headers(),

@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 import pytest
 
-import git_commits2slack
-from lib.exceptions import SlackTokenError
+from rss2irc import git_commits2slack
+from rss2irc.lib.exceptions import SlackTokenError
 
 
 @pytest.fixture
@@ -277,9 +277,9 @@ def test_git_show(mock_popen):
     assert retval == expected_output
 
 
-@patch("git_commits2slack.git_branch")
-@patch("git_commits2slack.git_pull")
-@patch("git_commits2slack.git_show")
+@patch("rss2irc.git_commits2slack.git_branch")
+@patch("rss2irc.git_commits2slack.git_pull")
+@patch("rss2irc.git_commits2slack.git_show")
 def test_main_ideal(
     mock_show,
     mock_pull,
@@ -401,7 +401,7 @@ def test_main_ideal(
         (["--return-error"], 1),
     ],
 )
-@patch("git_commits2slack.rss2slack.get_slack_token")
+@patch("rss2irc.git_commits2slack.rss2slack.get_slack_token")
 def test_main_slack_token_error(
     mock_get_slack_token,
     extra_args,
@@ -458,7 +458,7 @@ def test_main_slack_token_error(
         (["--return-error"], 1),
     ],
 )
-@patch("git_commits2slack.rss2slack.get_slack_token")
+@patch("rss2irc.git_commits2slack.rss2slack.get_slack_token")
 def test_main_random_exception(
     mock_get_slack_token,
     extra_args,

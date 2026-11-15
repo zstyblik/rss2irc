@@ -2,7 +2,7 @@
 """Unit tests for http_source.py."""
 import pytest
 
-from lib import HTTPSource
+from rss2irc.lib import HTTPSource
 
 
 @pytest.mark.parametrize(

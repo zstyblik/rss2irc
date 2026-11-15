@@ -10,9 +10,9 @@ import traceback
 from dataclasses import dataclass
 from datetime import datetime
 
-import rss2irc
-from lib import CachedData
-from lib import utils
+from rss2irc import rss2irc
+from rss2irc.lib import CachedData
+from rss2irc.lib import utils
 
 BUCKET_COUNT = 10
 

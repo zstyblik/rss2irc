@@ -12,11 +12,11 @@ from unittest.mock import patch
 
 import pytest
 
-import gh2slack
-import rss2irc
-from lib import CachedData
-from lib.exceptions import CacheReadError
-from lib.exceptions import SlackTokenError
+from rss2irc import gh2slack
+from rss2irc import rss2irc
+from rss2irc.lib import CachedData
+from rss2irc.lib.exceptions import CacheReadError
+from rss2irc.lib.exceptions import SlackTokenError
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -359,8 +359,8 @@ def test_main_ideal(
         (["--return-error"], 1),
     ],
 )
-@patch("gh2slack.rss2irc.wrap_write_cache")
-@patch("gh2slack.rss2irc.read_cache")
+@patch("rss2irc.gh2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.gh2slack.rss2irc.read_cache")
 def test_main_cache_read_error(
     mock_read_cache,
     mock_wrap_write_cache,
@@ -428,9 +428,9 @@ def test_main_cache_read_error(
         (["--return-error"], 1),
     ],
 )
-@patch("gh2slack.rss2irc.wrap_write_cache")
-@patch("gh2slack.rss2slack.get_slack_token")
-@patch("gh2slack.rss2irc.read_cache")
+@patch("rss2irc.gh2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.gh2slack.rss2slack.get_slack_token")
+@patch("rss2irc.gh2slack.rss2irc.read_cache")
 def test_main_slack_token_error(
     mock_read_cache,
     mock_get_slack_token,
@@ -501,9 +501,9 @@ def test_main_slack_token_error(
         (["--return-error"], 1),
     ],
 )
-@patch("gh2slack.rss2irc.wrap_write_cache")
-@patch("gh2slack.rss2slack.get_slack_token")
-@patch("gh2slack.rss2irc.read_cache")
+@patch("rss2irc.gh2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.gh2slack.rss2slack.get_slack_token")
+@patch("rss2irc.gh2slack.rss2irc.read_cache")
 def test_main_random_exception(
     mock_read_cache,
     mock_get_slack_token,
@@ -575,8 +575,8 @@ def test_main_random_exception(
         (["--return-error"], 1),
     ],
 )
-@patch("gh2slack.rss2irc.wrap_write_cache")
-@patch("gh2slack.rss2irc.read_cache")
+@patch("rss2irc.gh2slack.rss2irc.wrap_write_cache")
+@patch("rss2irc.gh2slack.rss2irc.read_cache")
 def test_main_wrap_write_cache_error(
     mock_read_cache,
     mock_wrap_write_cache,
