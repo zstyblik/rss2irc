@@ -70,7 +70,6 @@ def main():
     source = cache.get_source_by_url(args.rss_url)
     try:
         rsp = utils.get_rss(
-            logger,
             args.rss_url,
             args.rss_http_timeout,
             source.make_caching_headers(),

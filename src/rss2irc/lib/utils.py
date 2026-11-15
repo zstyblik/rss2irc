@@ -9,6 +9,8 @@ from .config_options import HTTP_TIMEOUT
 from .exceptions import EmptyResponseError
 from .exceptions import NotModifiedError
 
+module_logger = logging.getLogger("rss2irc.lib.utils")
+
 
 def calc_log_level(count: int) -> int:
     """Return logging log level as int based on count."""
@@ -27,7 +29,6 @@ def escalate_retcode(new_rc: int, old_rc: int) -> int:
 
 
 def get_rss(
-    logger: logging.Logger,
     url: str,
     timeout: int = HTTP_TIMEOUT,
     extra_headers: Dict = None,
@@ -50,9 +51,9 @@ def get_rss(
         for key, value in extra_headers.items():
             headers[key] = value
 
-    logger.debug("Make request at URL '%s'.", url)
+    module_logger.debug("Make request at URL '%s'.", url)
     rsp = requests.get(url, timeout=timeout, headers=headers)
-    logger.debug("Got HTTP Status Code '%i'.", rsp.status_code)
+    module_logger.debug("Got HTTP Status Code '%i'.", rsp.status_code)
     rsp.raise_for_status()
 
     if rsp.status_code == 304:

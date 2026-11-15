@@ -88,7 +88,6 @@ def main():
         slack_token = get_slack_token()
 
         rsp = utils.get_rss(
-            logger,
             args.rss_url,
             args.rss_http_timeout,
             source.make_caching_headers(),
