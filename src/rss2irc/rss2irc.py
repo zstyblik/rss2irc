@@ -287,29 +287,43 @@ def write_data(
     handle: str = None,
     sleep: int = 2,
 ) -> None:
-    """Write data into file."""
-    signal.signal(signal.SIGALRM, signal_handler)
-    signal.alarm(config_options.PIPE_OPEN_TIMEOUT)
-    with open(output, "wb") as fhandle:
-        signal.alarm(0)
-        fhandle_stat = os.fstat(fhandle.fileno())
+    """Write data into FIFO pipe."""
+    fd = -1
+    try:
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.alarm(config_options.PIPE_OPEN_TIMEOUT)
+
+        fd = os.open(output, os.O_WRONLY | os.O_NONBLOCK)
+        if fd < 0:
+            raise ValueError("invalid file descriptor")
+
+        fhandle_stat = os.fstat(fd)
         is_fifo = stat.S_ISFIFO(fhandle_stat.st_mode)
         if not is_fifo:
             raise NotFIFO("fhandle is expected to be a FIFO pipe")
 
-        for url in list(data.keys()):
-            message = format_message(url, data[url], handle)
-            try:
-                write_message(logger, fhandle, message)
-                time.sleep(sleep)
-            except (TimeoutError, ValueError):
-                logger.debug(
-                    "Failed to write '%s'=>'%s' due to exception: %s",
-                    url,
-                    data[url],
-                    traceback.format_exc(),
-                )
-                data.pop(url)
+        with os.fdopen(fd, "wb") as fhandle:
+            signal.alarm(0)
+            for url in list(data.keys()):
+                message = format_message(url, data[url], handle)
+                try:
+                    write_message(logger, fhandle, message)
+                    time.sleep(sleep)
+                except (TimeoutError, ValueError):
+                    logger.debug(
+                        "Failed to write '%s'=>'%s' due to exception: %s",
+                        url,
+                        data[url],
+                        traceback.format_exc(),
+                    )
+                    data.pop(url)
+
+        fd = -1
+    finally:
+        signal.alarm(0)
+        if fd > 0:
+            os.close(fd)
+            fd = -1
 
 
 def write_message(
